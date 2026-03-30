@@ -1,0 +1,25 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="generator" content="mdtopdf">
+    {% if title %}<title>{{ title }}</title>{% else %}<title>Document</title>{% endif %}
+    {% if author %}<meta name="author" content="{{ author }}">{% endif %}
+    <style>
+{{ css }}
+    </style>
+</head>
+<body>
+    {% if title or author or date %}
+    <div class="doc-header">
+        {% if title %}<h1 class="doc-title">{{ title }}</h1>{% endif %}
+        {% if author %}<p class="doc-author">作者：{{ author }}</p>{% endif %}
+        {% if date %}<p class="doc-date">{{ date }}</p>{% endif %}
+    </div>
+    {% endif %}
+    <div class="doc-content">
+        {{ body }}
+    </div>
+</body>
+</html>
+

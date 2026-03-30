@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "mdtopdf"
+version = "0.1.0"
+description = "Convert Markdown files (with tables, code, PlantUML/Mermaid diagrams) to PDF"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+    "click>=8.0",
+    "Markdown>=3.5",
+    "python-frontmatter>=1.0",
+    "Pygments>=2.16",
+    "WeasyPrint>=60.0",
+    "PyYAML>=6.0",
+    "requests>=2.31",
+    "Pillow>=10.0",
+    "Jinja2>=3.1",
+    "PyMuPDF>=1.23.0",
+]
+
+[project.scripts]
+mdtopdf = "mdtopdf.main:cli"
+mdtopdf-gui = "mdtopdf.gui:launch"
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["mdtopdf*"]
+
+[tool.setuptools.package-data]
+mdtopdf = [
+    "config/default_config.yaml",
+    "assets/styles/*.css",
+    "assets/templates/*.html",
+]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.mypy]
+python_version = "3.10"
+warn_return_any = true
+warn_unused_configs = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+

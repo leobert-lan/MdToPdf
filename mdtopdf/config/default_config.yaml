@@ -1,0 +1,40 @@
+# Default configuration for mdtopdf
+# Priority: this file < ~/.mdtopdf/config.yaml < Front Matter < CLI args
+
+page:
+  size: A4
+  margin:
+    top: 2.5cm
+    bottom: 2.5cm
+    left: 2.5cm
+    right: 2.5cm
+
+style:
+  font_family: "Arial, 'Noto Sans CJK SC', 'Microsoft YaHei', sans-serif"
+  font_size: 12pt
+  line_height: "1.6"
+  code_font_family: "'Courier New', Consolas, monospace"
+  code_font_size: 10pt
+  custom_css: null
+
+plantuml:
+  mode: local              # local | online
+  jar_path: plantuml.jar
+  server_url: "http://www.plantuml.com/plantuml"
+  timeout: 30
+
+mermaid:
+  mode: local              # local | online
+  mmdc_path: mmdc
+  ink_url: "https://mermaid.ink/img"
+  timeout: 30
+  background_color: white
+
+preview:
+  enabled: false
+  auto_close: false
+
+output:
+  default_suffix: .pdf
+  open_after_export: false
+

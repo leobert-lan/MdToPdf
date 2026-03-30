@@ -1,0 +1,3 @@
+[console_scripts]
+mdtopdf = mdtopdf.main:cli
+mdtopdf-gui = mdtopdf.gui:launch

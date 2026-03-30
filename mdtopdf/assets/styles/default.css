@@ -1,0 +1,182 @@
+/* =================================================================
+   mdtopdf — default.css  (GitHub Light theme)
+   Optimised for WeasyPrint PDF rendering.
+   Dynamic @page / font overrides are injected by the assembler.
+   ================================================================= */
+
+/* ── Page ──────────────────────────────────────────────────────── */
+@page {
+    size: A4;
+    margin: 25.4mm;
+    @bottom-center {
+        content: counter(page) " / " counter(pages);
+        font-size: 9pt;
+        color: #57606a;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI",
+                     Helvetica, Arial, sans-serif;
+    }
+}
+
+/* ── Reset ─────────────────────────────────────────────────────── */
+*, *::before, *::after {
+    box-sizing: border-box;
+}
+
+/* ── Body ──────────────────────────────────────────────────────── */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Noto Sans",
+                 Helvetica, Arial, "Microsoft YaHei", "Noto Sans CJK SC",
+                 sans-serif;
+    font-size: 16px;
+    line-height: 1.5;
+    color: #24292f;
+    background-color: #ffffff;
+    margin: 0;
+    padding: 0;
+    word-wrap: break-word;
+}
+
+/* ── Document header (generated from front matter) ─────────────── */
+.doc-header {
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+    border-bottom: 1px solid #d0d7de;
+    page-break-after: avoid;
+}
+.doc-title {
+    font-size: 2em;
+    font-weight: 600;
+    line-height: 1.25;
+    color: #24292f;
+    margin: 0 0 8px;
+    padding: 0;
+    border: none;
+}
+.doc-author, .doc-date {
+    color: #57606a;
+    font-size: 14px;
+    margin: 4px 0;
+}
+
+/* ── Headings ──────────────────────────────────────────────────── */
+h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.25;
+    margin-top: 24px;
+    margin-bottom: 16px;
+    color: #24292f;
+    page-break-after: avoid;
+}
+h1 { font-size: 2em;    padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
+h2 { font-size: 1.5em;  padding-bottom: .3em; border-bottom: 1px solid #d0d7de; }
+h3 { font-size: 1.25em; }
+h4 { font-size: 1em; }
+h5 { font-size: .875em; }
+h6 { font-size: .85em; color: #57606a; }
+
+/* ── Paragraphs ────────────────────────────────────────────────── */
+p { margin-top: 0; margin-bottom: 16px; orphans: 3; widows: 3; }
+
+/* ── Links ─────────────────────────────────────────────────────── */
+a { color: #0969da; text-decoration: none; }
+
+/* ── Images ────────────────────────────────────────────────────── */
+img { max-width: 100%; height: auto; border-style: none; page-break-inside: avoid; }
+
+/* ── Horizontal rule ────────────────────────────────────────────── */
+hr { border: 0; border-top: 1px solid #d0d7de; height: 0; margin: 24px 0; }
+
+/* ── Blockquote ────────────────────────────────────────────────── */
+blockquote {
+    padding: 0 1em;
+    color: #57606a;
+    border-left: .25em solid #d0d7de;
+    margin: 0 0 16px 0;
+}
+blockquote > :first-child { margin-top: 0; }
+blockquote > :last-child  { margin-bottom: 0; }
+
+/* ── Lists ─────────────────────────────────────────────────────── */
+ul, ol { margin-top: 0; margin-bottom: 16px; padding-left: 2em; }
+ul ul, ul ol, ol ol, ol ul { margin-top: 0; margin-bottom: 0; }
+li { word-wrap: break-word; }
+li + li { margin-top: .25em; }
+
+/* ── Tables ────────────────────────────────────────────────────── */
+table {
+    border-spacing: 0;
+    border-collapse: collapse;
+    width: 100%;
+    margin-bottom: 16px;
+    page-break-inside: avoid;
+}
+tr { background-color: #fff; border-top: 1px solid #d8dee4; }
+tr:nth-child(2n) { background-color: #f6f8fa; }
+th, td { padding: 6px 13px; border: 1px solid #d0d7de; vertical-align: top; }
+th { font-weight: 600; background-color: #f6f8fa; }
+
+/* ── Inline code ────────────────────────────────────────────────── */
+code {
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+                 "Courier New", monospace;
+    font-size: 85%;
+    background-color: #f0f2f5;
+    border-radius: 6px;
+    padding: .2em .4em;
+    white-space: nowrap;
+}
+
+/* ── Fenced code blocks (Pygments .highlight container) ──────────── */
+.codehilite, .highlight {
+    margin: 0 0 16px 0;
+    page-break-inside: avoid;
+}
+.codehilite pre, .highlight pre {
+    padding: 16px;
+    font-size: 85%;
+    line-height: 1.45;
+    background-color: #f6f8fa;
+    border-radius: 6px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    margin: 0;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo,
+                 "Courier New", monospace;
+}
+.codehilite pre code, .highlight pre code {
+    background-color: transparent;
+    border: none;
+    font-size: 100%;
+    padding: 0;
+}
+
+/* ── Diagram wrapper ────────────────────────────────────────────── */
+.diagram-wrapper {
+    text-align: center;
+    margin: 16px 0;
+    page-break-inside: avoid;
+}
+.diagram-img { max-width: 100%; height: auto; }
+
+/* ── Diagram render failure ─────────────────────────────────────── */
+.diagram-error {
+    background-color: #fff8c5;
+    border: 1px solid #d4a72c;
+    border-left: 4px solid #bf8700;
+    border-radius: 6px;
+    padding: 16px;
+    margin: 16px 0;
+    page-break-inside: avoid;
+}
+.diagram-error .error-header { font-weight: 600; color: #7d4e00; margin: 0 0 6px; font-size: 14px; }
+.diagram-error .error-detail { color: #7d4e00; font-size: 13px; margin: 0 0 8px; }
+.diagram-error pre {
+    background-color: #f2f2f2;
+    border-radius: 4px;
+    padding: 10px;
+    margin: 8px 0 0;
+    font-family: "SFMono-Regular", Consolas, "Liberation Mono", Menlo, "Courier New", monospace;
+    font-size: 12px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+}
