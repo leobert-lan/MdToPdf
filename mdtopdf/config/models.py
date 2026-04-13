@@ -73,4 +73,5 @@ class AppConfig:
     preview: bool = False
     open_after_export: bool = False
     output_path: Optional[str] = None
+    pre_unescape_markdown: bool = False
 

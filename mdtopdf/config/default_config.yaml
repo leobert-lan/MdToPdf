@@ -47,3 +47,5 @@ output:
   default_suffix: .pdf
   open_after_export: false
 
+pre_unescape_markdown: false
+

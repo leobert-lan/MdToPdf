@@ -17,13 +17,15 @@ from __future__ import annotations
 import logging
 import base64
 import re
+import threading
+import time
 import uuid
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from html import escape
 from pathlib import Path
 from typing import Any
-from urllib.parse import quote_plus
+from urllib.parse import quote, quote_plus
 
 import frontmatter
 import markdown
@@ -127,6 +129,9 @@ def _store_bare_expression(expr: str, store_fn: Any) -> str:
 class MathRenderer:
     """Render math by strategy with graceful fallback across available engines."""
 
+    _GLOBAL_CACHE: dict[str, str] = {}
+    _GLOBAL_CACHE_LOCK = threading.Lock()
+
     def __init__(
         self,
         mode: str = "auto",
@@ -139,6 +144,12 @@ class MathRenderer:
         self.online_providers = online_providers or ["codecogs_png", "vercel_svg", "mathnow_svg"]
 
     def render(self, fragment: MathFragment) -> str:
+        cache_key = self._global_cache_key(fragment)
+        with self._GLOBAL_CACHE_LOCK:
+            cached = self._GLOBAL_CACHE.get(cache_key)
+        if cached is not None:
+            return cached
+
         ordered = self._ordered_engines()
         for engine in ordered:
             if engine == "online":
@@ -146,12 +157,19 @@ class MathRenderer:
             else:
                 rendered = self._render_by_latex2mathml(fragment)
             if rendered:
+                with self._GLOBAL_CACHE_LOCK:
+                    self._GLOBAL_CACHE[cache_key] = rendered
                 return rendered
 
         fallback = escape(fragment.source)
         if fragment.block:
             return f'<pre class="math-fallback">{fallback}</pre>'
         return f'<code class="math-fallback">{fallback}</code>'
+
+    def _global_cache_key(self, fragment: MathFragment) -> str:
+        kind = "block" if fragment.block else "inline"
+        providers = ",".join(self.online_providers)
+        return f"{self.mode}|{providers}|{kind}|{fragment.expr.strip()}"
 
     def _ordered_engines(self) -> list[str]:
         if self.mode == "online":
@@ -182,13 +200,14 @@ class MathRenderer:
 
     def _render_by_online_provider(self, provider: str, fragment: MathFragment) -> str | None:
         encoded = quote_plus(fragment.expr)
+        codecogs_encoded = quote(fragment.expr, safe="")
         provider_name = provider.strip().lower()
         if provider_name == "codecogs_png":
-            # CodeCogs accepts raw LaTeX query; avoid '+' introduced by quote_plus.
-            url = f"https://latex.codecogs.com/png.image?{fragment.expr}"
+            # Use percent-encoding (with %20 spaces) to avoid '+' and invalid raw URLs.
+            url = f"https://latex.codecogs.com/png.image?{codecogs_encoded}"
             mime = "image/png"
         elif provider_name == "codecogs_svg":
-            url = f"https://latex.codecogs.com/svg.image?{fragment.expr}"
+            url = f"https://latex.codecogs.com/svg.image?{codecogs_encoded}"
             mime = "image/svg+xml"
         elif provider_name == "mathnow_svg":
             url = f"https://math.now.sh?from={encoded}"
@@ -351,23 +370,76 @@ class MathPreprocessor(Preprocessor):
 class MathPostprocessor(Postprocessor):
     """Renders math markers to MathML HTML blocks/spans."""
 
+    @staticmethod
+    def _cache_key(fragment: MathFragment) -> str:
+        kind = "block" if fragment.block else "inline"
+        return f"{kind}:{fragment.expr.strip()}"
+
     def run(self, text: str) -> str:
         math_map: dict[str, MathFragment] = getattr(self.md, "math_map", {})
+        rendered_cache: dict[str, str] = getattr(self.md, "math_rendered_cache", {})
         if not math_map:
             return text
 
+        # This postprocessor can run more than once (e.g., toc extension internals).
+        # Only render formulas whose markers still exist in this specific text pass.
+        pending_ids: list[str] = []
+        for math_id in math_map:
+            marker = f"{_MATH_MARKER_PREFIX}_{math_id}"
+            if marker in text or re.search(rf"<p>\s*{re.escape(marker)}\s*</p>", text):
+                pending_ids.append(math_id)
+
+        if not pending_ids:
+            logger.debug("当前文本无待渲染公式 marker，跳过渲染")
+            return text
+
         rendered_map: dict[str, str] = {}
-        max_workers = min(8, len(math_map))
+        ids_to_render: list[str] = []
+        ids_from_cache: list[str] = []
+        for mid in pending_ids:
+            key = self._cache_key(math_map[mid])
+            if key in rendered_cache:
+                ids_from_cache.append(mid)
+                rendered_map[mid] = rendered_cache[key]
+            else:
+                ids_to_render.append(mid)
+
+        if not ids_to_render:
+            logger.debug("本轮公式均已缓存，直接替换 marker")
+            for math_id in pending_ids:
+                fragment = math_map[math_id]
+                marker = f"{_MATH_MARKER_PREFIX}_{math_id}"
+                rendered = rendered_map[math_id]
+                if fragment.block:
+                    text = re.sub(
+                        rf"<p>\s*{re.escape(marker)}\s*</p>",
+                        lambda _: rendered,
+                        text,
+                    )
+                text = text.replace(marker, rendered)
+            return text
+
+        max_workers = min(8, len(ids_to_render))
+        started_at = time.perf_counter()
+        logger.info(
+            "开始渲染数学公式: 待渲染 %d 个（总 %d 个，缓存 %d 个），线程数 %d",
+            len(ids_to_render),
+            len(pending_ids),
+            len(ids_from_cache),
+            max_workers,
+        )
+        completed = 0
         with ThreadPoolExecutor(max_workers=max_workers) as executor:
             future_to_id = {
-                executor.submit(self._render, fragment): math_id
-                for math_id, fragment in math_map.items()
+                executor.submit(self._render, math_map[math_id]): math_id
+                for math_id in ids_to_render
             }
             for future in as_completed(future_to_id):
                 math_id = future_to_id[future]
                 fragment = math_map[math_id]
                 try:
                     rendered_map[math_id] = future.result()
+                    rendered_cache[self._cache_key(fragment)] = rendered_map[math_id]
                 except Exception as exc:
                     logger.warning("并行渲染公式失败，已降级为原文: %s", exc)
                     fallback = escape(fragment.source)
@@ -376,8 +448,19 @@ class MathPostprocessor(Postprocessor):
                         if fragment.block
                         else f'<code class="math-fallback">{fallback}</code>'
                     )
+                    rendered_cache[self._cache_key(fragment)] = rendered_map[math_id]
+                completed += 1
+                if completed % 5 == 0 or completed == len(ids_to_render):
+                    elapsed = time.perf_counter() - started_at
+                    logger.info(
+                        "数学公式渲染进度: %d/%d (%.1fs)",
+                        completed,
+                        len(ids_to_render),
+                        elapsed,
+                    )
 
-        for math_id, fragment in math_map.items():
+        for math_id in pending_ids:
+            fragment = math_map[math_id]
             marker = f"{_MATH_MARKER_PREFIX}_{math_id}"
             rendered = rendered_map.get(math_id, self._render(fragment))
             if fragment.block:
@@ -387,6 +470,14 @@ class MathPostprocessor(Postprocessor):
                     text,
                 )
             text = text.replace(marker, rendered)
+
+        logger.info(
+            "数学公式渲染完成: 新渲染 %d 个（总替换 %d 个），耗时 %.2fs",
+            len(ids_to_render),
+            len(pending_ids),
+            time.perf_counter() - started_at,
+        )
+        self.md.math_rendered_cache = rendered_cache
         return text
 
     def _render(self, fragment: MathFragment) -> str:
@@ -434,6 +525,7 @@ class MathExtension(Extension):
         md.preprocessors.register(MathPreprocessor(md), "math_pre", 20)
         md.postprocessors.register(MathPostprocessor(md), "math_post", 6)
         md.math_map = {}
+        md.math_rendered_cache = {}
         md.enable_bare_latex = self._enable_bare_latex
         md.math_renderer = MathRenderer(
             mode=self._math_mode,

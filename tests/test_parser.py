@@ -125,6 +125,7 @@ class TestMarkdownElements:
         assert "<em>" in result.html_body
 
 
+
 class TestMathRendering:
     def test_inline_dollar_math(self):
         result = _parse("质能方程是 $E=mc^2$。")
@@ -173,7 +174,21 @@ class TestMathRendering:
 
 
 class TestMathStrategySwitch:
+    def test_formula_not_rendered_twice_across_postprocess_passes(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        calls = {"n": 0}
+
+        def fake_get(*args, **kwargs):
+            calls["n"] += 1
+            return SimpleNamespace(status_code=200, content=b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
+
+        monkeypatch.setattr(parser_module.requests, "get", fake_get)
+        parser = MarkdownParser(math_mode="online", online_providers=["vercel_svg"])
+        parser.parse_string("$x$")
+        assert calls["n"] == 1
+
     def test_dtft_formulas_extract_and_build_online_urls(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         captured_urls: list[str] = []
 
         def fake_get(url, **kwargs):
@@ -217,6 +232,7 @@ class TestMathStrategySwitch:
         assert any("X(e^{j\\omega})" in q for q in decoded_queries)
 
     def test_online_mode_renders_base64_image(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         def fake_get(*args, **kwargs):
             return SimpleNamespace(status_code=200, content=b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
 
@@ -227,6 +243,7 @@ class TestMathStrategySwitch:
         assert "math-img-inline" in result.html_body
 
     def test_online_mode_falls_back_to_next_provider(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         state = {"n": 0}
 
         def fake_get(url, **kwargs):
@@ -245,6 +262,7 @@ class TestMathStrategySwitch:
         assert "math-img-inline" in result.html_body
 
     def test_auto_mode_falls_back_to_latex2mathml_when_online_fails(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         def fake_get(*args, **kwargs):
             raise RuntimeError("network down")
 
@@ -257,6 +275,7 @@ class TestMathStrategySwitch:
             assert "math-fallback" in result.html_body
 
     def test_online_timeout_uses_configured_value(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         observed: dict[str, int] = {}
 
         def fake_get(*args, **kwargs):
@@ -269,6 +288,7 @@ class TestMathStrategySwitch:
         assert observed["timeout"] == 3
 
     def test_parallel_online_rendering_for_multiple_formulas(self, monkeypatch: pytest.MonkeyPatch):
+        parser_module.MathRenderer._GLOBAL_CACHE.clear()
         import threading
         import time
 

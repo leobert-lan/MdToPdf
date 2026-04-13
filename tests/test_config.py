@@ -133,6 +133,7 @@ class TestCLIArgsOverrides:
         assert config.math.online_providers == ["vercel_svg", "mathnow_svg"]
 
 
+
 # ---------------------------------------------------------------------------
 # Priority: CLI > Front Matter > file
 # ---------------------------------------------------------------------------
