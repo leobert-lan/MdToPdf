@@ -18,6 +18,7 @@ dependencies = [
     "requests>=2.31",
     "Pillow>=10.0",
     "Jinja2>=3.1",
+    "latex2mathml>=3.77",
     "PyMuPDF>=1.23.0",
 ]
 

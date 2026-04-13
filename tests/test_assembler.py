@@ -168,3 +168,20 @@ class TestHTMLAssemblerCSS:
         html = HTMLAssembler(config).assemble(parse_result)
         assert "<!DOCTYPE html>" in html
 
+    def test_code_soft_wrap_css_present(self):
+        parse_result = MarkdownParser().parse_string("`very_long_inline_code_token`")
+        html = HTMLAssembler(_make_config()).assemble(parse_result)
+        assert "white-space: pre-wrap" in html
+        assert "overflow-wrap: anywhere" in html
+
+    def test_table_layout_css_present(self):
+        parse_result = MarkdownParser().parse_string("| A | B |\n|---|---|\n| longlonglong | value |")
+        html = HTMLAssembler(_make_config()).assemble(parse_result)
+        assert "table-layout: fixed" in html
+
+    def test_math_css_present(self):
+        parse_result = MarkdownParser().parse_string("$a+b$")
+        html = HTMLAssembler(_make_config()).assemble(parse_result)
+        assert ".math-inline" in html
+        assert ".math-block" in html
+

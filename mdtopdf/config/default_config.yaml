@@ -30,6 +30,15 @@ mermaid:
   timeout: 30
   background_color: white
 
+math:
+  mode: online             # online | auto | latex2mathml
+  online_timeout: 10
+  online_providers:
+    - codecogs_png
+    - vercel_svg
+    - mathnow_svg
+  enable_bare_latex: true
+
 preview:
   enabled: false
   auto_close: false

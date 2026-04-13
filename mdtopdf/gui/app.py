@@ -24,6 +24,8 @@ from pathlib import Path
 from tkinter import filedialog, messagebox, scrolledtext, ttk
 from typing import Any, Optional
 
+import frontmatter
+
 # ── DPI awareness (Windows) ───────────────────────────────────────────────────
 try:
     from ctypes import windll
@@ -83,12 +85,16 @@ class MDToPDFApp:
         self._plantuml_mode_var = tk.StringVar(value="online")
         self._plantuml_jar_var = tk.StringVar()
         self._mermaid_mode_var = tk.StringVar(value="online")
+        self._math_mode_var = tk.StringVar(value="online")
+        self._math_timeout_var = tk.StringVar(value="10")
+        self._math_providers_var = tk.StringVar(value="codecogs_png,vercel_svg,mathnow_svg")
         self._custom_css_var = tk.StringVar()
 
         # ── BoolVars ─────────────────────────────────────────────────────────
         self._preview_var = tk.BooleanVar(value=False)
         self._open_var = tk.BooleanVar(value=False)
         self._verbose_var = tk.BooleanVar(value=False)
+        self._math_bare_latex_var = tk.BooleanVar(value=True)
 
         # ── Runtime state ─────────────────────────────────────────────────
         self._converting = False
@@ -193,20 +199,45 @@ class MDToPDFApp:
             width=9,
         ).grid(row=1, column=1, sticky=tk.W, padx=(0, 16), pady=(6, 0))
 
-        # Row 2 — Custom CSS
-        ttk.Label(frame, text="自定义 CSS:").grid(
+        # Row 2 — Math
+        ttk.Label(frame, text="Math:").grid(
             row=2, column=0, sticky=tk.W, padx=(0, 6), pady=(6, 0)
         )
-        ttk.Entry(frame, textvariable=self._custom_css_var).grid(
-            row=2, column=1, columnspan=3, sticky=tk.EW, padx=4, pady=(6, 0)
+        ttk.Combobox(
+            frame,
+            textvariable=self._math_mode_var,
+            values=["online", "auto", "latex2mathml"],
+            state="readonly",
+            width=12,
+        ).grid(row=2, column=1, sticky=tk.W, padx=(0, 16), pady=(6, 0))
+        ttk.Label(frame, text="在线超时(秒):").grid(
+            row=2, column=2, sticky=tk.W, padx=(0, 6), pady=(6, 0)
         )
-        ttk.Button(frame, text="浏览…", width=7, command=self._browse_css).grid(
-            row=2, column=4, pady=(6, 0)
+        ttk.Entry(frame, textvariable=self._math_timeout_var, width=6).grid(
+            row=2, column=3, sticky=tk.W, padx=(6, 0), pady=(6, 0)
         )
 
-        # Row 3 — Checkboxes
+        ttk.Label(frame, text="在线节点链:").grid(
+            row=3, column=0, sticky=tk.W, padx=(0, 6), pady=(6, 0)
+        )
+        ttk.Entry(frame, textvariable=self._math_providers_var).grid(
+            row=3, column=1, columnspan=5, sticky=tk.EW, padx=4, pady=(6, 0)
+        )
+
+        # Row 4 — Custom CSS
+        ttk.Label(frame, text="自定义 CSS:").grid(
+            row=4, column=0, sticky=tk.W, padx=(0, 6), pady=(6, 0)
+        )
+        ttk.Entry(frame, textvariable=self._custom_css_var).grid(
+            row=4, column=1, columnspan=4, sticky=tk.EW, padx=4, pady=(6, 0)
+        )
+        ttk.Button(frame, text="浏览…", width=7, command=self._browse_css).grid(
+            row=4, column=5, pady=(6, 0)
+        )
+
+        # Row 5 — Checkboxes
         checks = ttk.Frame(frame)
-        checks.grid(row=3, column=0, columnspan=5, sticky=tk.W, pady=(10, 2))
+        checks.grid(row=5, column=0, columnspan=6, sticky=tk.W, pady=(10, 2))
         ttk.Checkbutton(
             checks, text="转换前预览 PDF", variable=self._preview_var
         ).pack(side=tk.LEFT, padx=(0, 20))
@@ -216,6 +247,11 @@ class MDToPDFApp:
         ttk.Checkbutton(
             checks, text="详细日志", variable=self._verbose_var
         ).pack(side=tk.LEFT)
+        ttk.Checkbutton(
+            checks,
+            text="启用裸 LaTeX 识别",
+            variable=self._math_bare_latex_var,
+        ).pack(side=tk.LEFT, padx=(20, 0))
 
     # ── Action row ────────────────────────────────────────────────────────────
 
@@ -325,11 +361,22 @@ class MDToPDFApp:
         cli_overrides: dict[str, Any] = {
             "plantuml_mode": self._plantuml_mode_var.get(),
             "mermaid_mode": self._mermaid_mode_var.get(),
+            "math_mode": self._math_mode_var.get(),
+            "math_enable_bare_latex": self._math_bare_latex_var.get(),
         }
         if self._plantuml_jar_var.get().strip():
             cli_overrides["plantuml_jar_path"] = self._plantuml_jar_var.get().strip()
         if self._custom_css_var.get().strip():
             cli_overrides["custom_css"] = self._custom_css_var.get().strip()
+        timeout_text = self._math_timeout_var.get().strip()
+        if timeout_text:
+            try:
+                cli_overrides["math_online_timeout"] = int(timeout_text)
+            except ValueError:
+                messagebox.showerror("错误", "数学公式超时必须是整数秒。")
+                return
+        if self._math_providers_var.get().strip():
+            cli_overrides["math_online_providers"] = self._math_providers_var.get().strip()
 
         from ..utils.logger import setup_logger
 
@@ -367,11 +414,19 @@ class MDToPDFApp:
             from ..core.parser import MarkdownParser
             from ..core.pdf_generator import PDFGenerator
 
-            parse_result = MarkdownParser().parse(input_path)
+            raw_markdown = input_path.read_text(encoding="utf-8")
+            front_matter = dict(frontmatter.loads(raw_markdown).metadata)
             config = load_config(
                 cli_args=cli_overrides,
-                front_matter=parse_result.metadata,
+                front_matter=front_matter,
             )
+            parser = MarkdownParser(
+                math_mode=config.math.mode,
+                enable_bare_latex=config.math.enable_bare_latex,
+                online_timeout=config.math.online_timeout,
+                online_providers=config.math.online_providers,
+            )
+            parse_result = parser.parse_string(raw_markdown)
             html = HTMLAssembler(config).assemble(parse_result, base_dir=input_path.parent)
             pdf_bytes = PDFGenerator().generate_bytes(html)
 

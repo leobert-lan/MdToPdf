@@ -13,6 +13,7 @@ import sys
 from pathlib import Path
 
 import click
+import frontmatter
 
 from . import __version__
 
@@ -64,6 +65,29 @@ from . import __version__
     help="自定义 CSS 文件路径，覆盖默认样式。",
 )
 @click.option(
+    "--math-mode",
+    type=click.Choice(["online", "auto", "latex2mathml"], case_sensitive=False),
+    default=None,
+    help="数学公式渲染策略：online / auto / latex2mathml。",
+)
+@click.option(
+    "--math-online-timeout",
+    type=int,
+    default=None,
+    help="在线公式 API 超时（秒）。",
+)
+@click.option(
+    "--math-online-providers",
+    type=str,
+    default=None,
+    help="在线公式节点链，逗号分隔，例如 codecogs_png,vercel_svg,mathnow_svg。",
+)
+@click.option(
+    "--math-bare-latex/--no-math-bare-latex",
+    default=None,
+    help="是否启用裸 LaTeX（如 \\omega、\\sum）自动识别。",
+)
+@click.option(
     "--open",
     "open_after",
     is_flag=True,
@@ -87,6 +111,10 @@ def cli(
     plantuml_mode: str | None,
     mermaid_mode: str | None,
     custom_css: Path | None,
+    math_mode: str | None,
+    math_online_timeout: int | None,
+    math_online_providers: str | None,
+    math_bare_latex: bool | None,
     open_after: bool,
     verbose: bool,
 ) -> None:
@@ -122,6 +150,14 @@ def cli(
         cli_overrides["mermaid_mode"] = mermaid_mode
     if custom_css:
         cli_overrides["custom_css"] = str(custom_css)
+    if math_mode:
+        cli_overrides["math_mode"] = math_mode
+    if math_online_timeout is not None:
+        cli_overrides["math_online_timeout"] = math_online_timeout
+    if math_online_providers:
+        cli_overrides["math_online_providers"] = math_online_providers
+    if math_bare_latex is not None:
+        cli_overrides["math_enable_bare_latex"] = math_bare_latex
     if open_after:
         cli_overrides["open_after_export"] = True
 
@@ -164,21 +200,30 @@ def _run_conversion(
     # Step 1 — Load config
     from .config.config_loader import load_config
 
-    # Step 2 — Parse Markdown (need front matter for config merge)
-    from .core.parser import MarkdownParser
-
-    logger.info("解析 Markdown: %s", input_file)
-    parser = MarkdownParser()
-    parse_result = parser.parse(input_file)
+    # Step 2 — Read raw markdown and extract front matter for config merge
+    raw_markdown = input_file.read_text(encoding="utf-8")
+    front_matter = dict(frontmatter.loads(raw_markdown).metadata)
 
     # Merge config with front matter + CLI overrides
     config = load_config(
         cli_args=cli_overrides,
-        front_matter=parse_result.metadata,
+        front_matter=front_matter,
         extra_config_path=config_file,
     )
 
-    # Step 3 — Assemble HTML
+    # Step 3 — Parse Markdown with configured math strategy
+    from .core.parser import MarkdownParser
+
+    logger.info("解析 Markdown: %s", input_file)
+    parser = MarkdownParser(
+        math_mode=config.math.mode,
+        enable_bare_latex=config.math.enable_bare_latex,
+        online_timeout=config.math.online_timeout,
+        online_providers=config.math.online_providers,
+    )
+    parse_result = parser.parse_string(raw_markdown)
+
+    # Step 4 — Assemble HTML
     from .core.assembler import HTMLAssembler
 
     logger.info(
@@ -187,7 +232,7 @@ def _run_conversion(
     assembler = HTMLAssembler(config)
     html = assembler.assemble(parse_result, base_dir=input_file.parent)
 
-    # Step 4 — Generate PDF
+    # Step 5 — Generate PDF
     from .core.pdf_generator import PDFGenerator
 
     generator = PDFGenerator()

@@ -37,6 +37,23 @@ class TestDefaultConfig:
         config = load_config()
         assert config.title == ""
 
+    def test_default_math_mode_auto(self):
+        config = load_config()
+        assert config.math.mode == "online"
+
+    def test_default_math_timeout(self):
+        config = load_config()
+        assert config.math.online_timeout == 10
+
+    def test_default_bare_latex_enabled(self):
+        config = load_config()
+        assert config.math.enable_bare_latex is True
+
+    def test_default_online_math_chain(self):
+        config = load_config()
+        assert config.math.online_timeout == 10
+        assert config.math.online_providers == ["codecogs_png", "vercel_svg", "mathnow_svg"]
+
     def test_preview_disabled_by_default(self):
         config = load_config()
         assert config.preview is False
@@ -64,6 +81,18 @@ class TestFrontMatterOverrides:
         config = load_config(front_matter={"mermaid_mode": "online"})
         assert config.mermaid.mode == "online"
 
+    def test_math_mode_from_front_matter(self):
+        config = load_config(front_matter={"math_mode": "online"})
+        assert config.math.mode == "online"
+
+    def test_math_bare_latex_from_front_matter(self):
+        config = load_config(front_matter={"math_enable_bare_latex": False})
+        assert config.math.enable_bare_latex is False
+
+    def test_math_online_providers_from_front_matter(self):
+        config = load_config(front_matter={"math_online_providers": ["vercel_svg", "codecogs_png"]})
+        assert config.math.online_providers == ["vercel_svg", "codecogs_png"]
+
 
 # ---------------------------------------------------------------------------
 # CLI args overrides
@@ -86,6 +115,22 @@ class TestCLIArgsOverrides:
     def test_custom_css_cli_override(self):
         config = load_config(cli_args={"custom_css": "/my/style.css"})
         assert config.style.custom_css == "/my/style.css"
+
+    def test_math_mode_cli_override(self):
+        config = load_config(cli_args={"math_mode": "latex2mathml"})
+        assert config.math.mode == "latex2mathml"
+
+    def test_math_online_timeout_cli_override(self):
+        config = load_config(cli_args={"math_online_timeout": 12})
+        assert config.math.online_timeout == 12
+
+    def test_math_bare_latex_cli_override(self):
+        config = load_config(cli_args={"math_enable_bare_latex": False})
+        assert config.math.enable_bare_latex is False
+
+    def test_math_online_providers_cli_override(self):
+        config = load_config(cli_args={"math_online_providers": "vercel_svg,mathnow_svg"})
+        assert config.math.online_providers == ["vercel_svg", "mathnow_svg"]
 
 
 # ---------------------------------------------------------------------------

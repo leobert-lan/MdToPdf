@@ -13,7 +13,14 @@ from typing import Any, Optional
 
 import yaml
 
-from .models import AppConfig, MermaidConfig, PageConfig, PlantUMLConfig, StyleConfig
+from .models import (
+    AppConfig,
+    MathConfig,
+    MermaidConfig,
+    PageConfig,
+    PlantUMLConfig,
+    StyleConfig,
+)
 
 logger = logging.getLogger("mdtopdf.config")
 
@@ -110,6 +117,14 @@ def _apply_front_matter(data: dict[str, Any], fm: dict[str, Any]) -> dict[str, A
         data.setdefault("plantuml", {})["mode"] = fm["plantuml_mode"]
     if "mermaid_mode" in fm:
         data.setdefault("mermaid", {})["mode"] = fm["mermaid_mode"]
+    if "math_mode" in fm:
+        data.setdefault("math", {})["mode"] = str(fm["math_mode"]).strip().lower()
+    if "math_enable_bare_latex" in fm:
+        data.setdefault("math", {})["enable_bare_latex"] = fm["math_enable_bare_latex"]
+    if "math_online_timeout" in fm:
+        data.setdefault("math", {})["online_timeout"] = fm["math_online_timeout"]
+    if "math_online_providers" in fm:
+        data.setdefault("math", {})["online_providers"] = fm["math_online_providers"]
 
     return data
 
@@ -122,6 +137,10 @@ def _apply_cli_args(data: dict[str, Any], args: dict[str, Any]) -> dict[str, Any
         "plantuml_mode": ("plantuml", "mode"),
         "plantuml_jar_path": ("plantuml", "jar_path"),
         "mermaid_mode": ("mermaid", "mode"),
+        "math_mode": ("math", "mode"),
+        "math_enable_bare_latex": ("math", "enable_bare_latex"),
+        "math_online_timeout": ("math", "online_timeout"),
+        "math_online_providers": ("math", "online_providers"),
         "custom_css": ("style", "custom_css"),
         "open_after_export": ("output", "open_after_export"),
     }
@@ -182,6 +201,35 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         background_color=mm_raw.get("background_color", "white"),
     )
 
+    math_raw = data.get("math", {})
+    online_providers_raw = math_raw.get(
+        "online_providers",
+        ["codecogs_png", "vercel_svg", "mathnow_svg"],
+    )
+    if isinstance(online_providers_raw, str):
+        online_providers = [p.strip() for p in online_providers_raw.split(",") if p.strip()]
+    elif isinstance(online_providers_raw, list):
+        online_providers = [str(p).strip() for p in online_providers_raw if str(p).strip()]
+    else:
+        online_providers = ["codecogs_png", "vercel_svg", "mathnow_svg"]
+
+    enable_bare_latex_raw = math_raw.get("enable_bare_latex", True)
+    if isinstance(enable_bare_latex_raw, str):
+        enable_bare_latex = enable_bare_latex_raw.strip().lower() in {"1", "true", "yes", "on"}
+    else:
+        enable_bare_latex = bool(enable_bare_latex_raw)
+
+    mode = str(math_raw.get("mode", "online")).strip().lower()
+    if mode not in {"online", "auto", "latex2mathml"}:
+        mode = "online"
+
+    math = MathConfig(
+        mode=mode,
+        enable_bare_latex=enable_bare_latex,
+        online_timeout=int(math_raw.get("online_timeout", 10)),
+        online_providers=online_providers,
+    )
+
     output_raw = data.get("output", {})
 
     return AppConfig(
@@ -192,6 +240,7 @@ def _build_config(data: dict[str, Any]) -> AppConfig:
         style=style,
         plantuml=plantuml,
         mermaid=mermaid,
+        math=math,
         preview=bool(data.get("preview", {}).get("enabled", False)),
         open_after_export=bool(output_raw.get("open_after_export", False)),
     )

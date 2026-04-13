@@ -43,6 +43,19 @@ class MermaidConfig:
 
 
 @dataclass
+class MathConfig:
+    # online: use online API chain only
+    # auto: online -> latex2mathml
+    # latex2mathml: latex2mathml -> online
+    mode: str = "online"
+    enable_bare_latex: bool = True
+    online_timeout: int = 10
+    online_providers: list[str] = field(
+        default_factory=lambda: ["codecogs_png", "vercel_svg", "mathnow_svg"]
+    )
+
+
+@dataclass
 class AppConfig:
     # Document metadata
     title: str = ""
@@ -54,6 +67,7 @@ class AppConfig:
     style: StyleConfig = field(default_factory=StyleConfig)
     plantuml: PlantUMLConfig = field(default_factory=PlantUMLConfig)
     mermaid: MermaidConfig = field(default_factory=MermaidConfig)
+    math: MathConfig = field(default_factory=MathConfig)
 
     # Runtime flags
     preview: bool = False

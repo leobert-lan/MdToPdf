@@ -43,6 +43,16 @@ mdtopdf input.md --plantuml-jar /path/to/plantuml.jar
 # 全在线模式（无需 Java/Node.js）
 mdtopdf input.md --plantuml-mode online --mermaid-mode online
 
+# 数学公式渲染策略（online/auto/latex2mathml）
+mdtopdf input.md --math-mode online
+
+# 在线公式节点链（一个失败继续尝试下一个）
+mdtopdf input.md --math-mode online --math-online-providers codecogs_png,vercel_svg,mathnow_svg
+mdtopdf input.md --math-online-timeout 12
+
+# 关闭裸 LaTeX 兼容开关
+mdtopdf input.md --no-math-bare-latex
+
 # 详细日志
 mdtopdf input.md -v
 ```
@@ -50,8 +60,9 @@ mdtopdf input.md -v
 ## 支持的 Markdown 元素
 
 - **标准语法**：标题、段落、列表、引用、链接、图片、加粗/斜体
-- **表格**：支持对齐方式
-- **代码块**：通过 Pygments 语法高亮（支持 500+ 语言）
+- **表格**：自动适配页宽，长内容可软换行
+- **代码块 / 行内代码**：通过 Pygments 语法高亮，长行自动软换行
+- **LaTeX 数学公式**：支持行内 `$...$` / `\(...\)` 与块级 `$$...$$` / `\[...\]`
 - **PlantUML 图表**：时序图、类图、流程图等
 - **Mermaid 图表**：流程图、时序图、甘特图等
 - **YAML Front Matter**：文档标题、作者、日期
@@ -82,7 +93,27 @@ mermaid:
 
 style:
   font_family: "Arial, 'Microsoft YaHei', sans-serif"
+
+math:
+  mode: online        # online | auto | latex2mathml
+  online_timeout: 10
+  online_providers: codecogs_png,vercel_svg,mathnow_svg
+  enable_bare_latex: true
 ```
+
+数学渲染策略说明：
+
+- `online`：仅使用在线 API 链渲染，产出内联 base64 图片。
+- `auto`：优先在线 API 链，其次 `latex2mathml`。
+- `latex2mathml`：优先 `latex2mathml`；失败时尝试在线 API。
+
+在线公式图片会并行拉取（不同公式并发请求），长文档转换会更快。
+
+在线 API 节点标识：
+
+- `codecogs_png` -> `https://latex.codecogs.com/png.image?...`
+- `vercel_svg` -> `https://math.vercel.app/?from=...`
+- `mathnow_svg` -> `https://math.now.sh?from=...`
 
 ## 开发
 
