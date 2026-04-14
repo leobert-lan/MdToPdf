@@ -73,6 +73,10 @@ class GUILogHandler(logging.Handler):
 class MDToPDFApp:
     """Tkinter GUI for mdtopdf."""
 
+    _INPUT_MODE_SINGLE = "single"
+    _INPUT_MODE_DIRECTORY = "directory"
+    _INPUT_MODE_TOC = "toc"
+
     def __init__(self) -> None:
         self._root = tk.Tk()
         self._root.title("mdtopdf — Markdown 转 PDF 工具")
@@ -82,6 +86,7 @@ class MDToPDFApp:
         # ── StringVars ──────────────────────────────────────────────────────
         self._input_var = tk.StringVar()
         self._output_var = tk.StringVar()
+        self._input_mode_var = tk.StringVar(value=self._INPUT_MODE_SINGLE)
         self._plantuml_mode_var = tk.StringVar(value="online")
         self._plantuml_jar_var = tk.StringVar()
         self._mermaid_mode_var = tk.StringVar(value="online")
@@ -103,6 +108,7 @@ class MDToPDFApp:
         self._build_ui()
         self._poll_queue()
         self._input_var.trace_add("write", self._auto_fill_output)
+        self._input_mode_var.trace_add("write", self._on_input_mode_changed)
 
     # ── UI construction ───────────────────────────────────────────────────────
 
@@ -141,27 +147,49 @@ class MDToPDFApp:
         frame.pack(fill=tk.X, pady=(0, 8))
         frame.columnconfigure(1, weight=1)
 
-        # Input row
-        ttk.Label(frame, text="输入文件 (.md):").grid(
+        ttk.Label(frame, text="输入模式:").grid(
             row=0, column=0, sticky=tk.W, padx=(0, 8)
         )
+        mode_combo = ttk.Combobox(
+            frame,
+            textvariable=self._input_mode_var,
+            state="readonly",
+            width=28,
+            values=[
+                self._INPUT_MODE_SINGLE,
+                self._INPUT_MODE_DIRECTORY,
+                self._INPUT_MODE_TOC,
+            ],
+        )
+        mode_combo.grid(row=0, column=1, sticky=tk.W, padx=4)
+        mode_combo.bind("<<ComboboxSelected>>", self._on_input_mode_selected)
+        ttk.Label(
+            frame,
+            text="single=单文件  directory=目录递归合并  toc=toc.md 链接顺序",
+        ).grid(row=0, column=2, sticky=tk.W, padx=(6, 0))
+
+        # Input row
+        self._input_label = ttk.Label(frame, text="输入文件 (.md):")
+        self._input_label.grid(row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(6, 0))
         ttk.Entry(frame, textvariable=self._input_var).grid(
-            row=0, column=1, sticky=tk.EW, padx=4
+            row=1, column=1, sticky=tk.EW, padx=4, pady=(6, 0)
         )
         ttk.Button(frame, text="浏览…", width=7, command=self._browse_input).grid(
-            row=0, column=2
+            row=1, column=2, pady=(6, 0)
         )
 
         # Output row
         ttk.Label(frame, text="输出文件 (.pdf):").grid(
-            row=1, column=0, sticky=tk.W, padx=(0, 8), pady=(6, 0)
+            row=2, column=0, sticky=tk.W, padx=(0, 8), pady=(6, 0)
         )
         ttk.Entry(frame, textvariable=self._output_var).grid(
-            row=1, column=1, sticky=tk.EW, padx=4, pady=(6, 0)
+            row=2, column=1, sticky=tk.EW, padx=4, pady=(6, 0)
         )
         ttk.Button(frame, text="浏览…", width=7, command=self._browse_output).grid(
-            row=1, column=2, pady=(6, 0)
+            row=2, column=2, pady=(6, 0)
         )
+
+        self._apply_input_mode_ui()
 
     # ── Options section ───────────────────────────────────────────────────────
 
@@ -301,10 +329,14 @@ class MDToPDFApp:
     # ── File browsing ─────────────────────────────────────────────────────────
 
     def _browse_input(self) -> None:
-        path = filedialog.askopenfilename(
-            title="选择 Markdown 文件",
-            filetypes=[("Markdown 文件", "*.md *.markdown"), ("所有文件", "*.*")],
-        )
+        mode = self._input_mode_var.get()
+        if mode == self._INPUT_MODE_DIRECTORY:
+            path = filedialog.askdirectory(title="选择 Markdown 根目录")
+        else:
+            path = filedialog.askopenfilename(
+                title="选择 Markdown 文件",
+                filetypes=[("Markdown 文件", "*.md *.markdown"), ("所有文件", "*.*")],
+            )
         if path:
             self._input_var.set(path)
 
@@ -337,7 +369,32 @@ class MDToPDFApp:
         """Auto-populate the output field when the input path is set."""
         src = self._input_var.get().strip()
         if src and not self._output_var.get().strip():
-            self._output_var.set(str(Path(src).with_suffix(".pdf")))
+            try:
+                self._output_var.set(str(self._derive_default_output(Path(src))))
+            except ValueError:
+                return
+
+    def _on_input_mode_selected(self, *_: Any) -> None:
+        self._apply_input_mode_ui()
+        self._auto_fill_output()
+
+    def _on_input_mode_changed(self, *_: Any) -> None:
+        self._apply_input_mode_ui()
+
+    def _apply_input_mode_ui(self) -> None:
+        mode = self._input_mode_var.get()
+        if mode == self._INPUT_MODE_DIRECTORY:
+            self._input_label.configure(text="输入目录:")
+        elif mode == self._INPUT_MODE_TOC:
+            self._input_label.configure(text="目录页文件 (toc.md):")
+        else:
+            self._input_label.configure(text="输入文件 (.md):")
+
+    def _derive_default_output(self, input_path: Path) -> Path:
+        mode = self._input_mode_var.get()
+        if mode == self._INPUT_MODE_DIRECTORY and input_path.is_dir():
+            return input_path.parent / f"{input_path.name}.pdf"
+        return input_path.with_suffix(".pdf")
 
     # ── Conversion ────────────────────────────────────────────────────────────
 
@@ -352,11 +409,20 @@ class MDToPDFApp:
 
         input_path = Path(input_str)
         if not input_path.exists():
-            messagebox.showerror("错误", f"文件不存在：\n{input_path}")
+            messagebox.showerror("错误", f"输入路径不存在：\n{input_path}")
+            return
+
+        mode = self._input_mode_var.get()
+        merge_toc = mode == self._INPUT_MODE_TOC
+        if mode == self._INPUT_MODE_DIRECTORY and not input_path.is_dir():
+            messagebox.showerror("错误", "当前模式需要输入目录。")
+            return
+        if mode != self._INPUT_MODE_DIRECTORY and not input_path.is_file():
+            messagebox.showerror("错误", "当前模式需要输入 Markdown 文件。")
             return
 
         output_str = self._output_var.get().strip()
-        output_path = Path(output_str) if output_str else input_path.with_suffix(".pdf")
+        output_path = Path(output_str) if output_str else self._derive_default_output(input_path)
 
         cli_overrides: dict[str, Any] = {
             "plantuml_mode": self._plantuml_mode_var.get(),
@@ -387,11 +453,17 @@ class MDToPDFApp:
         self._progress.start(12)
         self._set_status("  ⟳ 正在转换…")
         self._append_log("─" * 52, "SEP")
-        self._append_log(f"开始转换：{input_path.name}", "INFO")
+        self._append_log(f"开始转换：{input_path.name} (mode={mode})", "INFO")
 
         thread = threading.Thread(
             target=self._worker_conversion,
-            args=(input_path, output_path, cli_overrides, self._preview_var.get()),
+            args=(
+                input_path,
+                output_path,
+                cli_overrides,
+                self._preview_var.get(),
+                merge_toc,
+            ),
             daemon=True,
         )
         thread.start()
@@ -402,6 +474,7 @@ class MDToPDFApp:
         output_path: Path,
         cli_overrides: dict[str, Any],
         preview: bool,
+        merge_toc: bool,
     ) -> None:
         """Runs on a background thread — must not touch tkinter widgets."""
         gui_handler = GUILogHandler(self._queue)
@@ -413,9 +486,15 @@ class MDToPDFApp:
             from ..core.assembler import HTMLAssembler
             from ..core.parser import MarkdownParser
             from ..core.pdf_generator import PDFGenerator
+            from ..main import (
+                _absolutize_local_image_sources,
+                _merge_parse_results,
+                _resolve_input_files,
+            )
 
-            raw_markdown = input_path.read_text(encoding="utf-8")
-            front_matter = dict(frontmatter.loads(raw_markdown).metadata)
+            input_files = _resolve_input_files(input_path, merge_toc=merge_toc)
+            raw_markdowns = [p.read_text(encoding="utf-8") for p in input_files]
+            front_matter = dict(frontmatter.loads(raw_markdowns[0]).metadata)
             config = load_config(
                 cli_args=cli_overrides,
                 front_matter=front_matter,
@@ -426,8 +505,18 @@ class MDToPDFApp:
                 online_timeout=config.math.online_timeout,
                 online_providers=config.math.online_providers,
             )
-            parse_result = parser.parse_string(raw_markdown)
-            html = HTMLAssembler(config).assemble(parse_result, base_dir=input_path.parent)
+            parsed_results = []
+            for file_path, raw_markdown in zip(input_files, raw_markdowns):
+                chapter_result = parser.parse_string(raw_markdown)
+                chapter_result.html_body = _absolutize_local_image_sources(
+                    chapter_result.html_body,
+                    file_path.parent,
+                )
+                parsed_results.append((file_path, chapter_result))
+            parse_result = _merge_parse_results(parsed_results)
+
+            base_dir = input_path.parent if input_path.is_file() else input_path
+            html = HTMLAssembler(config).assemble(parse_result, base_dir=base_dir)
             pdf_bytes = PDFGenerator().generate_bytes(html)
 
             self._queue.put_nowait(("success", pdf_bytes, output_path, preview))

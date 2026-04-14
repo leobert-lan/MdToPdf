@@ -85,6 +85,11 @@ mdtopdf input.md -v
 - 输入单文件并启用 `--merge-toc` 时，先保留该文件内容，再按文内 Markdown 链接顺序追加章节文件。
 - 合并后输出为一份 PDF，图表与图片仍会内联到最终 HTML 中。
 
+GUI 也支持这两种合并方式：
+
+- 在输入模式选择 `directory`，即可递归合并目录中的 Markdown 文件（等价于 `mdtopdf ./book`）。
+- 在输入模式选择 `toc`，并选择 `toc.md`，即可按链接顺序合并（等价于 `mdtopdf toc.md --merge-toc`）。
+
 ## 支持的 Markdown 元素
 
 - **标准语法**：标题、段落、列表、引用、链接、图片、加粗/斜体
