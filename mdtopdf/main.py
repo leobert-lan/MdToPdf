@@ -11,6 +11,7 @@ from __future__ import annotations
 
 import sys
 import re
+from urllib.parse import unquote
 from html import escape
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -286,7 +287,7 @@ def _run_conversion(
     click.echo(f"✓ 已生成 PDF: {output_file}")
 
 
-_MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+\.m(?:d|arkdown))(?:#[^)]+)?\)", re.IGNORECASE)
+_MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)", re.IGNORECASE)
 _IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=)(["\'])(.*?)\2', re.IGNORECASE | re.DOTALL)
 
 
@@ -321,13 +322,42 @@ def _extract_markdown_links(toc_file: Path) -> list[Path]:
     content = toc_file.read_text(encoding="utf-8")
     links: list[Path] = []
     for match in _MD_LINK_RE.findall(content):
-        rel = match.strip()
-        if rel.startswith(("http://", "https://", "#")):
+        rel = _normalize_markdown_link_target(match)
+        if not rel:
             continue
         path = (toc_file.parent / rel).resolve()
         if path.exists() and path.is_file() and path.suffix.lower() in {".md", ".markdown"}:
             links.append(path)
     return links
+
+
+def _normalize_markdown_link_target(raw_target: str) -> str | None:
+    target = raw_target.strip()
+    if not target:
+        return None
+
+    # Markdown allows destinations like (<chapter with spaces.md>) for spaces.
+    if target.startswith("<"):
+        close = target.find(">")
+        if close == -1:
+            return None
+        destination = target[1:close].strip()
+    else:
+        # Non-angle destinations may include an optional title after whitespace.
+        destination = target.split(maxsplit=1)[0]
+
+    if not destination:
+        return None
+    destination = destination.split("#", 1)[0].strip()
+    if not destination:
+        return None
+    if destination.startswith(("http://", "https://", "#")):
+        return None
+
+    decoded = unquote(destination)
+    if Path(decoded).suffix.lower() not in {".md", ".markdown"}:
+        return None
+    return decoded
 
 
 def _merge_parse_results(parsed_results: list[tuple[Path, ParseResult]]) -> ParseResult:

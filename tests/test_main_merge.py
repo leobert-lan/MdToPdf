@@ -37,6 +37,27 @@ class TestTocLinkExtraction:
         links = _extract_markdown_links(toc)
         assert links == [ch1.resolve(), ch2.resolve()]
 
+    def test_supports_encoded_and_angle_wrapped_paths(self, tmp_path: Path):
+        toc = tmp_path / "toc.md"
+        chapter_a = tmp_path / "Chapter One.md"
+        chapter_b = tmp_path / "docs" / "Chapter Two.md"
+        chapter_b.parent.mkdir(parents=True)
+        chapter_a.write_text("# A", encoding="utf-8")
+        chapter_b.write_text("# B", encoding="utf-8")
+        toc.write_text(
+            "\n".join(
+                [
+                    "# TOC",
+                    "- [A](Chapter%20One.md)",
+                    "- [B](<docs/Chapter Two.md>)",
+                ]
+            ),
+            encoding="utf-8",
+        )
+
+        links = _extract_markdown_links(toc)
+        assert links == [chapter_a.resolve(), chapter_b.resolve()]
+
 
 class TestResolveInputFiles:
     def test_directory_mode_collects_all_markdown(self, tmp_path: Path):
