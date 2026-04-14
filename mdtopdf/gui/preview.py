@@ -247,19 +247,8 @@ def _system_viewer_fallback(
 
 
 def _open_with_system(path: Path) -> None:
-    import os
+    from ..utils.file_utils import open_with_default_app
 
-    try:
-        if sys.platform == "win32":
-            os.startfile(str(path))  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            import subprocess
-
-            subprocess.run(["open", str(path)], check=False)
-        else:
-            import subprocess
-
-            subprocess.run(["xdg-open", str(path)], check=False)
-    except Exception as exc:
-        logger.warning("无法打开系统查看器: %s", exc)
+    if not open_with_default_app(path):
+        logger.warning("无法打开系统查看器: %s", path)
 

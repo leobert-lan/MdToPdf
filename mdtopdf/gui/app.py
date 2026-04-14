@@ -603,21 +603,9 @@ class MDToPDFApp:
 
     @staticmethod
     def _open_file(path: Path) -> None:
-        import os
+        from ..utils.file_utils import open_with_default_app
 
-        try:
-            if sys.platform == "win32":
-                os.startfile(str(path))  # type: ignore[attr-defined]
-            elif sys.platform == "darwin":
-                import subprocess
-
-                subprocess.run(["open", str(path)], check=False)
-            else:
-                import subprocess
-
-                subprocess.run(["xdg-open", str(path)], check=False)
-        except Exception:
-            pass
+        open_with_default_app(path)
 
     # ── Log helpers ───────────────────────────────────────────────────────────
 

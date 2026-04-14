@@ -87,6 +87,7 @@ fi
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$ROOT/dist"
 BUILD_DIR="$ROOT/build"
+SPEC_DIR="$BUILD_DIR/spec"
 ICON_ICNS="$ROOT/mdtopdf.icns"
 
 DATA_FILES=(
@@ -211,7 +212,7 @@ has_arch() {
 resolve_target_arch() {
   local arches
   arches="$(python_arches)"
-  log "Detected Python architectures: $arches"
+  log "Detected Python architectures: $arches" >&2
 
   if [[ "$TARGET_ARCH" == "auto" ]]; then
     if has_arch arm64 "$arches" && has_arch x86_64 "$arches"; then
@@ -260,6 +261,7 @@ run_pyinstaller() {
     --name "$app_name"
     --clean
     --noconfirm
+    "--specpath=$SPEC_DIR"
     "--distpath=$DIST_DIR"
     "--workpath=$BUILD_DIR"
     --target-arch "$effective_arch"
@@ -326,12 +328,20 @@ print_summary() {
 main() {
   log "Root: $ROOT"
   log "Mode: $([[ "$ONEFILE" == "1" ]] && echo onefile || echo onedir)"
+  mkdir -p "$SPEC_DIR"
 
   ensure_pyinstaller
   check_weasyprint_import
 
   local effective_arch
   effective_arch="$(resolve_target_arch)"
+  case "$effective_arch" in
+    universal2|arm64|x86_64) ;;
+    *)
+      err "Resolved invalid target architecture: $effective_arch"
+      exit 1
+      ;;
+  esac
   log "Target architecture: $effective_arch"
 
   run_pyinstaller "$ROOT/gui_entry.py" "mdtopdf-gui" "1" "$effective_arch"

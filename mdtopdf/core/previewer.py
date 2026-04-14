@@ -1,7 +1,7 @@
 """PDF previewer.
 
-MVP: write PDF bytes to a temp file and open with the system default viewer
-     via ``os.startfile()`` (Windows native API — no extra dependency).
+MVP: write PDF bytes to a temp file and open it with the system default PDF
+viewer.
 
 Enhanced (future): tkinter window with PyMuPDF page rendering.
 """
@@ -9,10 +9,9 @@ Enhanced (future): tkinter window with PyMuPDF page rendering.
 from __future__ import annotations
 
 import logging
-import os
-import sys
 from pathlib import Path
 
+from ..utils.file_utils import open_with_default_app
 from ..utils.temp_manager import get_temp_file
 
 logger = logging.getLogger("mdtopdf.previewer")
@@ -34,14 +33,5 @@ class Previewer:
 
     @staticmethod
     def _open(path: Path) -> None:
-        if sys.platform == "win32":
-            os.startfile(str(path))  # type: ignore[attr-defined]
-        elif sys.platform == "darwin":
-            import subprocess
-
-            subprocess.run(["open", str(path)], check=False)
-        else:
-            import subprocess
-
-            subprocess.run(["xdg-open", str(path)], check=False)
+        open_with_default_app(path)
 

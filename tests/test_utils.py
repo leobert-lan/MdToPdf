@@ -11,6 +11,7 @@ from mdtopdf.utils.file_utils import (
     collect_markdown_files,
     derive_output_path,
     ensure_parent_dir,
+    open_with_default_app,
     read_text_file,
     validate_input_path,
     validate_input_file,
@@ -121,6 +122,50 @@ class TestReadTextFile:
         f = tmp_path / "doc.md"
         f.write_text("hello world", encoding="utf-8")
         assert read_text_file(f) == "hello world"
+
+
+class TestOpenWithDefaultApp:
+    def test_uses_open_on_macos(self, tmp_path, monkeypatch):
+        observed: list[list[str]] = []
+
+        def fake_run(cmd, check):
+            observed.append(cmd)
+
+        monkeypatch.setattr("mdtopdf.utils.file_utils.sys.platform", "darwin")
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF")
+
+        assert open_with_default_app(pdf) is True
+        assert observed == [["open", str(pdf)]]
+
+    def test_uses_startfile_on_windows(self, tmp_path, monkeypatch):
+        observed: list[str] = []
+
+        def fake_startfile(path: str):
+            observed.append(path)
+
+        monkeypatch.setattr("mdtopdf.utils.file_utils.sys.platform", "win32")
+        monkeypatch.setattr("os.startfile", fake_startfile, raising=False)
+
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF")
+
+        assert open_with_default_app(pdf) is True
+        assert observed == [str(pdf)]
+
+    def test_returns_false_when_dispatch_fails(self, tmp_path, monkeypatch):
+        def fake_run(cmd, check):
+            raise OSError("boom")
+
+        monkeypatch.setattr("mdtopdf.utils.file_utils.sys.platform", "darwin")
+        monkeypatch.setattr("subprocess.run", fake_run)
+
+        pdf = tmp_path / "doc.pdf"
+        pdf.write_bytes(b"%PDF")
+
+        assert open_with_default_app(pdf) is False
 
 
 # ---------------------------------------------------------------------------

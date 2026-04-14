@@ -279,9 +279,10 @@ def _run_conversion(
     generator.generate_file(html, output_file)
 
     if open_after:
-        import os
+        from .utils.file_utils import open_with_default_app
 
-        os.startfile(str(output_file))  # type: ignore[attr-defined]
+        if not open_with_default_app(output_file):
+            logger.warning("无法自动打开 PDF 文件: %s", output_file)
 
     click.echo(f"✓ 已生成 PDF: {output_file}")
 

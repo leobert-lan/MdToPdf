@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import subprocess
+import sys
 from pathlib import Path
 
 
@@ -75,4 +77,25 @@ def read_text_file(path: Path, encoding: str = "utf-8") -> str:
         return path.read_text(encoding=encoding)
     except UnicodeDecodeError:
         return path.read_text(encoding="cp1252", errors="replace")
+
+
+def open_with_default_app(path: Path) -> bool:
+    """Open *path* with the system default application.
+
+    Returns ``True`` when the open command was dispatched successfully,
+    otherwise ``False``.
+    """
+    try:
+        if sys.platform == "win32":
+            import os
+
+            os.startfile(str(path))  # type: ignore[attr-defined]
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(path)], check=False)
+        else:
+            subprocess.run(["xdg-open", str(path)], check=False)
+        return True
+    except Exception:
+        return False
+
 
