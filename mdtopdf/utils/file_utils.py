@@ -23,6 +23,36 @@ def validate_input_file(path: Path) -> None:
         )
 
 
+def validate_input_path(path: Path) -> None:
+    """Validate file or directory input path for CLI.
+
+    - files: follow ``validate_input_file`` rules
+    - directories: require at least one Markdown file
+    """
+    if not path.exists():
+        raise FileNotFoundError(f"输入路径不存在: {path}")
+    if path.is_file():
+        validate_input_file(path)
+        return
+    if not path.is_dir():
+        raise ValueError(f"输入路径既不是文件也不是目录: {path}")
+
+    if not collect_markdown_files(path):
+        raise ValueError(f"目录内未找到 Markdown 文件: {path}")
+
+
+def collect_markdown_files(directory: Path) -> list[Path]:
+    """Return Markdown files under *directory* in deterministic path order."""
+    files = [
+        p for p in directory.rglob("*")
+        if p.is_file() and p.suffix.lower() in _VALID_MD_SUFFIXES
+    ]
+    return sorted(
+        files,
+        key=lambda p: tuple(part.lower() for part in p.relative_to(directory).parts),
+    )
+
+
 def derive_output_path(input_path: Path, output_path: Path | None = None) -> Path:
     """Return the resolved output PDF path.
 

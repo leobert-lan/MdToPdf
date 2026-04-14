@@ -8,9 +8,11 @@ from pathlib import Path
 import pytest
 
 from mdtopdf.utils.file_utils import (
+    collect_markdown_files,
     derive_output_path,
     ensure_parent_dir,
     read_text_file,
+    validate_input_path,
     validate_input_file,
 )
 from mdtopdf.utils.logger import get_logger, setup_logger
@@ -48,6 +50,34 @@ class TestValidateInputFile:
             validate_input_file(f)
         assert any("markdown" in r.message.lower() or "md" in r.message.lower()
                    for r in caplog.records)
+
+
+class TestValidateInputPath:
+    def test_accepts_markdown_directory(self, tmp_path):
+        d = tmp_path / "book"
+        d.mkdir()
+        (d / "01_intro.md").write_text("# Intro", encoding="utf-8")
+        validate_input_path(d)
+
+    def test_rejects_directory_without_markdown(self, tmp_path):
+        d = tmp_path / "book"
+        d.mkdir()
+        (d / "notes.txt").write_text("hello", encoding="utf-8")
+        with pytest.raises(ValueError):
+            validate_input_path(d)
+
+
+class TestCollectMarkdownFiles:
+    def test_collects_recursively_in_stable_order(self, tmp_path):
+        root = tmp_path / "book"
+        (root / "chapters").mkdir(parents=True)
+        (root / "02.md").write_text("", encoding="utf-8")
+        (root / "01.md").write_text("", encoding="utf-8")
+        (root / "chapters" / "a.md").write_text("", encoding="utf-8")
+
+        files = collect_markdown_files(root)
+        rel = [str(p.relative_to(root)).replace("\\", "/") for p in files]
+        assert rel == ["01.md", "02.md", "chapters/a.md"]
 
 
 class TestDeriveOutputPath:

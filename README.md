@@ -28,6 +28,12 @@ pip install -e .
 # 基本转换（输出到同目录 input.pdf）
 mdtopdf input.md
 
+# 合并目录下所有 Markdown（按目录/文件名字典序）输出一个 PDF
+mdtopdf ./book
+
+# 以目录文件为入口，按链接顺序合并章节
+mdtopdf toc.md --merge-toc
+
 # 指定输出路径
 mdtopdf input.md output/document.pdf
 
@@ -56,6 +62,12 @@ mdtopdf input.md --no-math-bare-latex
 # 详细日志
 mdtopdf input.md -v
 ```
+
+多文件合并规则：
+
+- 输入目录时，递归收集 `.md/.markdown` 文件并按相对路径排序后拼接。
+- 输入单文件并启用 `--merge-toc` 时，先保留该文件内容，再按文内 Markdown 链接顺序追加章节文件。
+- 合并后输出为一份 PDF，图表与图片仍会内联到最终 HTML 中。
 
 ## 支持的 Markdown 元素
 
