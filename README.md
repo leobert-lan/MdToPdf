@@ -11,6 +11,16 @@ pip install -e .
 
 ## 外部依赖（非 Python）
 
+### 平台依赖矩阵（WeasyPrint）
+
+| 平台 | 是否需要 GTK3 Windows Installer | 必要原生库/运行时 |
+|------|-------------------------------|------------------|
+| Windows | **需要** | GTK3 Runtime（含 Cairo/Pango 等） |
+| macOS (Intel) | 不需要 | Cairo、Pango、GDK-PixBuf、libffi（建议 Homebrew 安装） |
+| macOS (Apple Silicon) | 不需要 | Cairo、Pango、GDK-PixBuf、libffi（建议 Homebrew 安装） |
+
+> 结论：**macOS 不需要安装 Windows 的 GTK3 Installer**，但仍需要 WeasyPrint 依赖的底层图形/排版库。
+
 | 依赖 | 用途 | 获取方式 |
 |------|------|----------|
 | **GTK3 运行时**（Windows 必须） | WeasyPrint 图形后端 | [GTK3 Windows Installer](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) |
@@ -21,6 +31,12 @@ pip install -e .
 > ```bash
 > mdtopdf input.md --plantuml-mode online --mermaid-mode online
 > ```
+
+macOS 建议先安装基础库：
+
+```bash
+brew install cairo pango gdk-pixbuf libffi
+```
 
 ## 快速使用
 
@@ -162,7 +178,15 @@ mdtopdf/
 tests/
   fixtures/            # 示例 .md 文件
 ```
-## 打包成 EXE（Windows）
+## 打包与分发（Windows/macOS）
+
+### 分发策略建议
+
+- **跨 OS（Windows + macOS）**：无法用一个原生二进制同时覆盖，建议发布 `Windows EXE` + `macOS App` 两个产物。
+- **macOS 双架构（Intel + Apple Silicon）**：可使用 `universal2` 产物做“单一 macOS 分发包”。
+- **单一源码分发**：可发布 `sdist/wheel`（`python -m build`），由用户在目标平台安装依赖后运行。
+
+### Windows（现有脚本）
 
 ```bash
 # 激活虚拟环境
@@ -188,3 +212,33 @@ python build_exe.py --with-cli
 # 手动指定 GTK3（若自动检测失败）
 python build_exe.py --gtk3-bin "C:\Program Files\GTK3-Runtime Win64\bin"
 ```
+
+> `build_exe.py` 当前是 Windows 打包脚本（生成 `.exe`）。
+
+### macOS（Intel + Apple Silicon）
+
+推荐使用 `universal2` Python 环境，并在 macOS 上打包：
+
+```bash
+python -m pip install -U pip
+python -m pip install -r requirements.txt
+bash build_macos.sh --target-arch universal2
+```
+
+常用命令：
+
+```bash
+# 默认：自动检测 Python 架构并打包 GUI
+bash build_macos.sh
+
+# 文件夹模式 + 同时打包 CLI
+bash build_macos.sh --onedir --with-cli
+
+# 指定 Python 解释器
+bash build_macos.sh --python python3.12 --target-arch arm64
+```
+
+说明：
+
+- `--target-arch universal2` 需要 PyInstaller bootloader 与 Python/依赖支持 universal2。
+- 若环境不满足 universal2，可退回分别构建 `x86_64` 与 `arm64` 两个包再发布。
