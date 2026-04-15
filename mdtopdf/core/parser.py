@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import logging
 import base64
+import hashlib
 import re
 import threading
 import time
 import uuid
+from collections import OrderedDict
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from dataclasses import dataclass, field
 from html import escape
@@ -131,6 +133,10 @@ class MathRenderer:
 
     _GLOBAL_CACHE: dict[str, str] = {}
     _GLOBAL_CACHE_LOCK = threading.Lock()
+    _ONLINE_IMAGE_CACHE: "OrderedDict[str, tuple[str, int]]" = OrderedDict()
+    _ONLINE_IMAGE_CACHE_LOCK = threading.Lock()
+    _ONLINE_IMAGE_CACHE_SIZE = 0
+    _ONLINE_IMAGE_CACHE_LIMIT = 100 * 1024 * 1024
 
     def __init__(
         self,
@@ -199,6 +205,11 @@ class MathRenderer:
         return None
 
     def _render_by_online_provider(self, provider: str, fragment: MathFragment) -> str | None:
+        expr_cache_key = hashlib.md5(fragment.expr.encode("utf-8")).hexdigest()
+        cached_src = self._get_cached_online_image(expr_cache_key)
+        if cached_src is not None:
+            return self._wrap_online_image(fragment, cached_src)
+
         encoded = quote_plus(fragment.expr)
         codecogs_encoded = quote(fragment.expr, safe="")
         provider_name = provider.strip().lower()
@@ -239,10 +250,42 @@ class MathRenderer:
 
         b64 = base64.b64encode(content).decode("ascii")
         src = f"data:{mime};base64,{b64}"
+        self._set_cached_online_image(expr_cache_key, src, len(content))
+        return self._wrap_online_image(fragment, src)
+
+    @staticmethod
+    def _wrap_online_image(fragment: MathFragment, src: str) -> str:
         cls = "math-img math-img-block" if fragment.block else "math-img math-img-inline"
         if fragment.block:
             return f'<div class="math-block"><img class="{cls}" src="{src}" alt="math formula"></div>'
         return f'<span class="math-inline"><img class="{cls}" src="{src}" alt="math formula"></span>'
+
+    @classmethod
+    def _get_cached_online_image(cls, key: str) -> str | None:
+        with cls._ONLINE_IMAGE_CACHE_LOCK:
+            item = cls._ONLINE_IMAGE_CACHE.get(key)
+            if item is None:
+                return None
+            src, size = item
+            cls._ONLINE_IMAGE_CACHE.move_to_end(key)
+            cls._ONLINE_IMAGE_CACHE[key] = (src, size)
+            return src
+
+    @classmethod
+    def _set_cached_online_image(cls, key: str, src: str, size_bytes: int) -> None:
+        entry_size = max(0, int(size_bytes))
+        with cls._ONLINE_IMAGE_CACHE_LOCK:
+            old = cls._ONLINE_IMAGE_CACHE.pop(key, None)
+            if old is not None:
+                cls._ONLINE_IMAGE_CACHE_SIZE -= old[1]
+
+            cls._ONLINE_IMAGE_CACHE[key] = (src, entry_size)
+            cls._ONLINE_IMAGE_CACHE_SIZE += entry_size
+
+            # LRU eviction to keep in-memory image cache under the configured limit.
+            while cls._ONLINE_IMAGE_CACHE and cls._ONLINE_IMAGE_CACHE_SIZE > cls._ONLINE_IMAGE_CACHE_LIMIT:
+                _, (_, evicted_size) = cls._ONLINE_IMAGE_CACHE.popitem(last=False)
+                cls._ONLINE_IMAGE_CACHE_SIZE -= evicted_size
 
 
 

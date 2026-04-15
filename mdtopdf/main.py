@@ -289,6 +289,8 @@ def _run_conversion(
 
 _MD_LINK_RE = re.compile(r"\[[^\]]+\]\(([^)]+)\)", re.IGNORECASE)
 _IMG_SRC_RE = re.compile(r'(<img\b[^>]*?\bsrc=)(["\'])(.*?)\2', re.IGNORECASE | re.DOTALL)
+_HEADING_OPEN_RE = re.compile(r"<h([1-6])(\s[^>]*)?>", re.IGNORECASE)
+_HEADING_CLOSE_RE = re.compile(r"</h([1-6])>", re.IGNORECASE)
 
 
 def _resolve_input_files(input_path: Path, merge_toc: bool) -> list[Path]:
@@ -371,9 +373,10 @@ def _merge_parse_results(parsed_results: list[tuple[Path, ParseResult]]) -> Pars
         if not metadata and getattr(result, "metadata", None):
             metadata = dict(result.metadata)
         diagrams.extend(result.diagrams)
+        normalized_html = _rebalance_heading_levels(result.html_body, target_level=3)
         section = (
             f'<section class="mdtopdf-merged-chapter" data-source="{escape(str(file_path))}">'
-            f"{result.html_body}"
+            f"{normalized_html}"
             "</section>"
         )
         html_parts.append(section)
@@ -403,5 +406,37 @@ def _absolutize_local_image_sources(html_body: str, base_dir: Path) -> str:
         return f"{prefix}{quote}{candidate.as_posix()}{quote}"
 
     return _IMG_SRC_RE.sub(_replace, html_body)
+
+
+def _find_highest_heading_level(html_body: str) -> int | None:
+    levels = [int(m.group(1)) for m in _HEADING_OPEN_RE.finditer(html_body)]
+    return min(levels) if levels else None
+
+
+def _rebalance_heading_levels(html_body: str, target_level: int = 3) -> str:
+    highest = _find_highest_heading_level(html_body)
+    if highest is None:
+        return html_body
+
+    delta = target_level - highest
+    if delta == 0:
+        return html_body
+
+    def _clamp(level: int) -> int:
+        return max(1, min(6, level))
+
+    def _replace_open(match: re.Match) -> str:
+        level = int(match.group(1))
+        attrs = match.group(2) or ""
+        new_level = _clamp(level + delta)
+        return f"<h{new_level}{attrs}>"
+
+    def _replace_close(match: re.Match) -> str:
+        level = int(match.group(1))
+        new_level = _clamp(level + delta)
+        return f"</h{new_level}>"
+
+    rebalanced = _HEADING_OPEN_RE.sub(_replace_open, html_body)
+    return _HEADING_CLOSE_RE.sub(_replace_close, rebalanced)
 
 

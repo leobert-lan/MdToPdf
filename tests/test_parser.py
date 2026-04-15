@@ -23,6 +23,12 @@ def _parse(md: str) -> ParseResult:
     return MarkdownParser().parse_string(md)
 
 
+def _reset_math_caches() -> None:
+    parser_module.MathRenderer._GLOBAL_CACHE.clear()
+    parser_module.MathRenderer._ONLINE_IMAGE_CACHE.clear()
+    parser_module.MathRenderer._ONLINE_IMAGE_CACHE_SIZE = 0
+
+
 # ---------------------------------------------------------------------------
 # Front Matter extraction
 # ---------------------------------------------------------------------------
@@ -175,7 +181,7 @@ class TestMathRendering:
 
 class TestMathStrategySwitch:
     def test_formula_not_rendered_twice_across_postprocess_passes(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         calls = {"n": 0}
 
         def fake_get(*args, **kwargs):
@@ -188,7 +194,7 @@ class TestMathStrategySwitch:
         assert calls["n"] == 1
 
     def test_dtft_formulas_extract_and_build_online_urls(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         captured_urls: list[str] = []
 
         def fake_get(url, **kwargs):
@@ -232,7 +238,7 @@ class TestMathStrategySwitch:
         assert any("X(e^{j\\omega})" in q for q in decoded_queries)
 
     def test_online_mode_renders_base64_image(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         def fake_get(*args, **kwargs):
             return SimpleNamespace(status_code=200, content=b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
 
@@ -243,7 +249,7 @@ class TestMathStrategySwitch:
         assert "math-img-inline" in result.html_body
 
     def test_online_mode_falls_back_to_next_provider(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         state = {"n": 0}
 
         def fake_get(url, **kwargs):
@@ -262,7 +268,7 @@ class TestMathStrategySwitch:
         assert "math-img-inline" in result.html_body
 
     def test_auto_mode_falls_back_to_latex2mathml_when_online_fails(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         def fake_get(*args, **kwargs):
             raise RuntimeError("network down")
 
@@ -275,7 +281,7 @@ class TestMathStrategySwitch:
             assert "math-fallback" in result.html_body
 
     def test_online_timeout_uses_configured_value(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         observed: dict[str, int] = {}
 
         def fake_get(*args, **kwargs):
@@ -288,7 +294,7 @@ class TestMathStrategySwitch:
         assert observed["timeout"] == 3
 
     def test_parallel_online_rendering_for_multiple_formulas(self, monkeypatch: pytest.MonkeyPatch):
-        parser_module.MathRenderer._GLOBAL_CACHE.clear()
+        _reset_math_caches()
         import threading
         import time
 
@@ -303,6 +309,47 @@ class TestMathStrategySwitch:
         parser = MarkdownParser(math_mode="online", online_providers=["vercel_svg"])
         parser.parse_string("$a$ $b$ $c$ $d$ $e$ $f$")
         assert len(thread_ids) >= 2
+
+    def test_online_formula_cache_uses_expr_md5_key(self, monkeypatch: pytest.MonkeyPatch):
+        _reset_math_caches()
+        calls = {"n": 0}
+
+        def fake_get(*args, **kwargs):
+            calls["n"] += 1
+            return SimpleNamespace(status_code=200, content=b"<svg xmlns='http://www.w3.org/2000/svg'></svg>")
+
+        monkeypatch.setattr(parser_module.requests, "get", fake_get)
+        parser_inline = MarkdownParser(math_mode="online", online_providers=["vercel_svg"])
+        parser_block = MarkdownParser(math_mode="online", online_providers=["codecogs_svg"])
+        parser_inline.parse_string("$x+y$")
+        parser_block.parse_string("$$x+y$$")
+
+        assert calls["n"] == 1
+
+    def test_online_formula_cache_evicts_when_limit_exceeded(self, monkeypatch: pytest.MonkeyPatch):
+        _reset_math_caches()
+        calls = {"n": 0}
+        original_limit = parser_module.MathRenderer._ONLINE_IMAGE_CACHE_LIMIT
+        parser_module.MathRenderer._ONLINE_IMAGE_CACHE_LIMIT = 20
+
+        def fake_get(url, **kwargs):
+            calls["n"] += 1
+            if "from=a" in url:
+                return SimpleNamespace(status_code=200, content=b"<svg>a</svg>")
+            return SimpleNamespace(status_code=200, content=b"<svg>b</svg>")
+
+        monkeypatch.setattr(parser_module.requests, "get", fake_get)
+        try:
+            parser = MarkdownParser(math_mode="online", online_providers=["vercel_svg"])
+            parser.parse_string("$a$")
+            parser.parse_string("$b$")
+            # Force re-entry into online image cache path (skip rendered HTML cache).
+            parser_module.MathRenderer._GLOBAL_CACHE.clear()
+            parser.parse_string("$a$")
+
+            assert calls["n"] == 3
+        finally:
+            parser_module.MathRenderer._ONLINE_IMAGE_CACHE_LIMIT = original_limit
 
 
 # ---------------------------------------------------------------------------
