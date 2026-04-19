@@ -95,6 +95,20 @@ class TestMergeParseResults:
         assert "mdtopdf-merged-chapter" in merged.html_body
         assert "chapter-divider" in merged.html_body
 
+    def test_rebalances_headings_down_when_top_level_is_too_high(self):
+        r1 = ParseResult(metadata={}, html_body='<h1 id="a">A</h1><h2>B</h2>', diagrams=[])
+        merged = _merge_parse_results([(Path("a.md"), r1)])
+
+        assert '<h3 id="a">A</h3>' in merged.html_body
+        assert "<h4>B</h4>" in merged.html_body
+
+    def test_rebalances_headings_up_when_top_level_is_too_low(self):
+        r1 = ParseResult(metadata={}, html_body="<h4>A</h4><h6>B</h6>", diagrams=[])
+        merged = _merge_parse_results([(Path("b.md"), r1)])
+
+        assert "<h3>A</h3>" in merged.html_body
+        assert "<h5>B</h5>" in merged.html_body
+
 
 class TestAbsolutizeImageSources:
     def test_rewrites_relative_img_src(self, tmp_path: Path):
