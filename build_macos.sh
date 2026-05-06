@@ -88,7 +88,7 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DIST_DIR="$ROOT/dist"
 BUILD_DIR="$ROOT/build"
 SPEC_DIR="$BUILD_DIR/spec"
-ICON_ICNS="$ROOT/mdtopdf.icns"
+ICON_ICNS="$ROOT/assets/icons/icon.icns"
 
 DATA_FILES=(
   "$ROOT/mdtopdf/assets:mdtopdf/assets"

@@ -37,8 +37,8 @@ ROOT = Path(__file__).parent.resolve()
 DIST_DIR = ROOT / "dist"
 BUILD_DIR = ROOT / "build"
 
-# 应用图标（可替换为实际 .ico 文件路径，不存在则忽略）
-ICON_PATH = ROOT / "mdtopdf.ico"
+# 应用图标
+ICON_PATH = ROOT / "assets" / "icons" / "icon.ico"
 
 # 内置资源文件（必须随 EXE 一起打包）
 DATA_FILES: list[tuple[str, str]] = [

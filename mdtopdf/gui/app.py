@@ -82,6 +82,7 @@ class MDToPDFApp:
         self._root.title("mdtopdf — Markdown 转 PDF 工具")
         self._root.resizable(True, True)
         self._root.minsize(750, 620)
+        self._apply_window_icon()
 
         # ── StringVars ──────────────────────────────────────────────────────
         self._input_var = tk.StringVar()
@@ -109,6 +110,35 @@ class MDToPDFApp:
         self._poll_queue()
         self._input_var.trace_add("write", self._auto_fill_output)
         self._input_mode_var.trace_add("write", self._on_input_mode_changed)
+
+    # ── Window icon ───────────────────────────────────────────────────────────
+
+    def _apply_window_icon(self) -> None:
+        """Set the window / taskbar / Dock icon from the bundled assets."""
+        from pathlib import Path as _Path
+
+        assets_root = _Path(__file__).parent.parent / "assets" / "icons"
+
+        # macOS: use .icns via wm iconphoto (PhotoImage from PNG works fine)
+        # Windows: use .ico via wm iconbitmap
+        # Linux: use PNG via wm iconphoto
+        try:
+            if sys.platform == "win32":
+                ico = assets_root / "icon.ico"
+                if ico.exists():
+                    self._root.iconbitmap(str(ico))
+            else:
+                # PhotoImage supports PNG natively in Tk 8.6+
+                png = assets_root / "icon_256.png"
+                if not png.exists():
+                    png = assets_root / "icon_128.png"
+                if png.exists():
+                    photo = tk.PhotoImage(file=str(png))
+                    self._root.iconphoto(True, photo)
+                    # Keep a reference so it isn't garbage-collected
+                    self._icon_photo = photo  # type: ignore[attr-defined]
+        except Exception:
+            pass  # icon is cosmetic — never block startup
 
     # ── UI construction ───────────────────────────────────────────────────────
 
