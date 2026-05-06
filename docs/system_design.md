@@ -811,8 +811,34 @@ MdToPdf/
 | Node.js | ≥ 16 | 运行 mmdc（Mermaid CLI） | 本地 Mermaid 必须 |
 | `@mermaid-js/mermaid-cli` | ≥ 10 | Mermaid 渲染引擎 | 本地 Mermaid 必须 |
 | GTK3 运行时（Windows） | — | WeasyPrint 图形后端 | WeasyPrint 必须 |
+| Homebrew cairo/pango/gdk-pixbuf/libffi（macOS） | — | WeasyPrint 图形后端 | WeasyPrint 必须 |
 
-> 若使用全在线模式（`plantuml_mode: online` + `mermaid_mode: online`），则仅需 GTK3 运行时，无需 Java 和 Node.js。
+> 若使用全在线模式（`plantuml_mode: online` + `mermaid_mode: online`），则仅需系统原生库，无需 Java 和 Node.js。
+
+#### macOS 开发环境要求（重要）
+
+**必须使用系统 Python venv，不得使用 Conda 环境。**
+
+Conda 环境自带 `libfontconfig`、`libglib`、`libcairo` 等原生库，但无 `libpango`。
+WeasyPrint 加载 pango 时会回退到 Homebrew 的 `/usr/local/lib/libpango`，
+而该 pango 的编译链接指向 Homebrew 的 fontconfig（`/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib`）。
+运行时进程中同时存在 Conda 的 libfontconfig 与 Homebrew 的 libfontconfig 两个实例，
+导致 GObject 类型系统内部状态不一致，触发 `SIGSEGV` / `SIGILL`。
+
+正确的 macOS 开发环境搭建步骤：
+
+```bash
+# 1. 安装原生依赖（Homebrew）
+brew install cairo pango gdk-pixbuf libffi
+
+# 2. 用系统 Python 或 pyenv Python 创建 venv
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. 安装 Python 依赖
+pip install -r requirements.txt
+pip install -e .
+```
 
 ### 11.3 开发依赖（`requirements-dev.txt`）
 

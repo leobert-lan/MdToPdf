@@ -634,6 +634,17 @@ class MDToPDFApp:
 
 def launch() -> None:
     """Create and run the GUI application."""
+    # Pre-initialise pango/fontconfig on the main thread **before** any worker
+    # thread is spawned.  This prevents a SIGSEGV on macOS (Intel & Apple
+    # Silicon) where fontconfig's first-time initialisation is not thread-safe.
+    import sys
+    if sys.platform == "darwin":
+        try:
+            from ..core.pdf_generator import PDFGenerator
+            PDFGenerator.warmup()
+        except Exception:
+            pass
+
     app = MDToPDFApp()
     app.run()
 

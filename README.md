@@ -4,39 +4,79 @@
 
 ## 安装
 
+### Windows
+
 ```bash
+# 1. 安装 GTK3 运行时（WeasyPrint 必须）
+#    https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases
+
+# 2. 创建并激活虚拟环境
+python -m venv .venv
+.venv\Scripts\Activate.ps1
+
+# 3. 安装 Python 依赖
 pip install -r requirements.txt
 pip install -e .
 ```
+
+### macOS（Intel 与 Apple Silicon）
+
+> ⚠️ **重要：必须使用 Python 原生 venv，不可使用 Conda 环境。**
+>
+> 原因：Conda 环境会将自己的 `libglib`、`libfontconfig` 等库与 Homebrew
+> 的 `libpango`（Conda 无 pango 包时回退）混用，导致同一进程中加载两份
+> 互不兼容的 fontconfig，触发 `SIGSEGV` / `SIGILL` 崩溃。
+
+```bash
+# 1. 安装 Homebrew 原生库（WeasyPrint 依赖）
+brew install cairo pango gdk-pixbuf libffi
+
+# 2. 使用系统 Python 或 pyenv Python 创建 venv（不要用 conda python）
+python3 -m venv .venv
+source .venv/bin/activate
+
+# 3. 安装 Python 依赖
+pip install -r requirements.txt
+pip install -e .
+```
+
+验证 WeasyPrint 可以正常运行：
+
+```bash
+python -c "from weasyprint import HTML; HTML(string='<p>ok</p>').write_pdf(); print('WeasyPrint OK')"
+```
+
+#### 为什么不能用 Conda？
+
+WeasyPrint 通过 cffi 的 `dlopen` 加载原生库。在 Conda 环境里：
+
+- Conda 自带 `libfontconfig`、`libglib`、`libcairo` 等——但**没有** `libpango`
+- `ctypes.util.find_library` 解析 pango 时找不到 Conda 版本，回退到 Homebrew 的 `/usr/local/lib/libpango-1.0.dylib`
+- Homebrew 的 pango 编译时硬链接了 Homebrew 的 fontconfig（`/usr/local/opt/fontconfig/lib/libfontconfig.1.dylib`）
+- 结果：进程中同时存在 **Conda 的 libfontconfig** 和 **Homebrew 的 libfontconfig** 两个实例，共享全局 GObject 类型系统但版本不一致 → `GSlice assertion failed` / `SIGSEGV` 崩溃
+
+使用系统 venv + Homebrew，所有原生库来自同一来源，不存在此问题。
 
 ## 外部依赖（非 Python）
 
 ### 平台依赖矩阵（WeasyPrint）
 
-| 平台 | 是否需要 GTK3 Windows Installer | 必要原生库/运行时 |
-|------|-------------------------------|------------------|
-| Windows | **需要** | GTK3 Runtime（含 Cairo/Pango 等） |
-| macOS (Intel) | 不需要 | Cairo、Pango、GDK-PixBuf、libffi（建议 Homebrew 安装） |
-| macOS (Apple Silicon) | 不需要 | Cairo、Pango、GDK-PixBuf、libffi（建议 Homebrew 安装） |
-
-> 结论：**macOS 不需要安装 Windows 的 GTK3 Installer**，但仍需要 WeasyPrint 依赖的底层图形/排版库。
+| 平台 | 必要原生库/运行时 | 获取方式 |
+|------|-----------------|---------|
+| **Windows** | GTK3 Runtime（含 Cairo/Pango 等） | [GTK3 Windows Installer](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) |
+| **macOS (Intel)** | Cairo、Pango、GDK-PixBuf、libffi | `brew install cairo pango gdk-pixbuf libffi` |
+| **macOS (Apple Silicon)** | 同上 | `brew install cairo pango gdk-pixbuf libffi` |
 
 | 依赖 | 用途 | 获取方式 |
 |------|------|----------|
-| **GTK3 运行时**（Windows 必须） | WeasyPrint 图形后端 | [GTK3 Windows Installer](https://github.com/tschoonj/GTK-for-Windows-Runtime-Environment-Installer/releases) |
 | JRE ≥ 8 + `plantuml.jar` | 本地 PlantUML 渲染 | [PlantUML 下载](https://plantuml.com/download) |
 | Node.js ≥ 16 + `mmdc` | 本地 Mermaid 渲染 | `npm install -g @mermaid-js/mermaid-cli` |
 
-> **最小安装**：只需安装 GTK3，其余图表通过在线服务渲染：
+> **最小安装**：图表通过在线服务渲染，无需 Java/Node.js：
 > ```bash
 > mdtopdf input.md --plantuml-mode online --mermaid-mode online
 > ```
 
-macOS 建议先安装基础库：
-
-```bash
-brew install cairo pango gdk-pixbuf libffi
-```
 
 ## 快速使用
 
@@ -151,7 +191,16 @@ math:
 ## 开发
 
 ```bash
+# macOS / Linux — 使用系统 venv（不要用 conda）
+python3 -m venv .venv && source .venv/bin/activate
 pip install -r requirements-dev.txt
+pip install -e .
+
+# Windows
+python -m venv .venv && .venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt
+pip install -e .
+
 pytest tests/                    # 运行测试
 pytest --cov=mdtopdf tests/      # 带覆盖率
 black mdtopdf/                   # 格式化

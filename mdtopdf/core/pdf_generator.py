@@ -4,14 +4,37 @@ from __future__ import annotations
 
 import ctypes
 import logging
+import os
 import sys
 from pathlib import Path
 
 logger = logging.getLogger("mdtopdf.pdf_generator")
 
 
+def _fix_macos_locale() -> None:
+    """Ensure LANG/LC_ALL are set to a fontconfig-compatible value on macOS.
+
+    fontconfig prints "ignoring UTF-8: not a valid region tag" when the locale
+    string uses a charset suffix that it cannot parse (e.g. ``zh_CN.UTF-8``
+    exported from a shell with a non-standard LC_ALL).  Setting LANG to the
+    POSIX-standard ``en_US.UTF-8`` silences the warning and avoids a related
+    crash in pango_fc_font_map_load_fontset when called off the main thread.
+    """
+    if sys.platform != "darwin":
+        return
+    lang = os.environ.get("LANG", "")
+    # Only override when the current value looks problematic for fontconfig
+    # (contains a charset suffix that fontconfig rejects as a region tag).
+    if ".UTF-8" in lang or ".utf-8" in lang or not lang:
+        os.environ.setdefault("LANG", "en_US.UTF-8")
+        os.environ.setdefault("LC_CTYPE", "en_US.UTF-8")
+
+
 class PDFGenerator:
     """Thin wrapper around WeasyPrint's HTML-to-PDF conversion."""
+
+    # Guards the one-time main-thread fontstack warm-up (macOS only).
+    _fontstack_warmed_up: bool = False
 
     _MACOS_LIBRARY_PATTERNS: tuple[str, ...] = (
         "libffi*.dylib",
@@ -49,6 +72,7 @@ class PDFGenerator:
     @staticmethod
     def _import_weasyprint():
         """Import WeasyPrint with platform-specific recovery/help text."""
+        _fix_macos_locale()
         try:
             from weasyprint import HTML
             return HTML
@@ -128,6 +152,30 @@ class PDFGenerator:
                 seen.add(directory)
         return unique_dirs
 
+    @classmethod
+    def warmup(cls) -> None:
+        """Fix locale and preload native libraries on macOS before any worker thread starts.
+
+        This is a lightweight operation (no PDF rendering).  The actual root
+        cause of macOS crashes is a mixed-library situation where Homebrew pango
+        and conda fontconfig are loaded simultaneously; that must be fixed at the
+        environment level (see :py:meth:`_build_runtime_error` for guidance).
+        This method only handles the ``LC_CTYPE=UTF-8`` locale warning and
+        pre-loads shared libraries so they resolve consistently.
+
+        The method is idempotent — subsequent calls are a no-op.
+        """
+        if cls._fontstack_warmed_up:
+            return
+        cls._fontstack_warmed_up = True
+
+        if sys.platform != "darwin":
+            return
+
+        _fix_macos_locale()
+        cls._attempt_preload_macos_runtime_libraries()
+        logger.debug("macOS 原生库预加载完成")
+
     @staticmethod
     def _build_runtime_error(exc: OSError) -> RuntimeError:
         detail = str(exc)
@@ -141,11 +189,16 @@ class PDFGenerator:
 
         if sys.platform == "darwin":
             return RuntimeError(
-                "WeasyPrint 无法在 macOS 上加载 PDF 导出所需的原生库。\n"
-                "请先安装/确认这些依赖可用：\n"
-                "  brew install cairo pango gdk-pixbuf libffi\n"
-                "如果你运行的是打包后的 .app，请确认这些库位于 /opt/homebrew/lib 或 /usr/local/lib，"
-                "或重新使用已安装这些依赖的终端环境启动应用。\n"
+                "WeasyPrint 无法在 macOS 上加载 PDF 导出所需的原生库。\n\n"
+                "【最常见原因】conda 环境中缺少 pango，导致 WeasyPrint 混用 Homebrew 的\n"
+                "libpango/libpangoft2 和 conda 的 libfontconfig，两份 fontconfig 同时\n"
+                "加载引发 SIGSEGV。\n\n"
+                "修复方法（conda 环境）：\n"
+                "  conda install -c conda-forge pango\n\n"
+                "修复方法（系统 Python / pip 环境）：\n"
+                "  brew install cairo pango gdk-pixbuf libffi\n\n"
+                "如果你运行的是打包后的 .app，请确认这些库位于同一来源"
+                "（全部 Homebrew 或全部 conda-forge）。\n"
                 f"原始错误: {detail}"
             )
 

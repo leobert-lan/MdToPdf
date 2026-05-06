@@ -52,8 +52,28 @@ mdtopdf input.md --css theme.css --plantuml-jar /opt/plantuml.jar -v
 | JRE >= 8 + `plantuml.jar` | Local PlantUML rendering |
 | Node.js >= 16 + `@mermaid-js/mermaid-cli` (`mmdc`) | Local Mermaid rendering |
 | GTK3 runtime (Windows) | WeasyPrint — **always required** |
+| `brew install cairo pango gdk-pixbuf libffi` (macOS) | WeasyPrint — **always required** |
 
-Without GTK3, WeasyPrint will not function at all. Install via the official GTK3 Windows installer. For diagram-free or CI use cases, `--plantuml-mode online --mermaid-mode online` avoids the Java and Node.js requirements entirely.
+Without GTK3, WeasyPrint will not function at all on Windows. Install via the official GTK3 Windows installer. For diagram-free or CI use cases, `--plantuml-mode online --mermaid-mode online` avoids the Java and Node.js requirements entirely.
+
+## macOS Environment Warning — DO NOT use Conda
+
+**Always use a plain Python `venv` on macOS. Never use a Conda environment.**
+
+Conda ships its own `libfontconfig`, `libglib`, and `libcairo` but has no `libpango`.
+When WeasyPrint tries to load pango it falls back to Homebrew's copy, which was compiled
+against Homebrew's fontconfig. At runtime the process ends up with **two separate
+fontconfig instances** (Conda's and Homebrew's) that share global GObject state but are
+binary-incompatible → `GLib-GObject-WARNING: cannot unreference class of invalid type`
+→ `GSlice assertion failed` → `SIGILL` / `SIGSEGV` crash.
+
+Correct macOS setup:
+```bash
+brew install cairo pango gdk-pixbuf libffi   # system-level libs
+python3 -m venv .venv                        # plain venv, NOT conda
+source .venv/bin/activate
+pip install -r requirements.txt && pip install -e .
+```
 
 ## Windows-Specific Conventions
 - All path handling uses `pathlib.Path` (never raw string concatenation).
@@ -63,7 +83,14 @@ Without GTK3, WeasyPrint will not function at all. Install via the official GTK3
 
 ## Dev Workflow
 ```bash
-pip install -r requirements-dev.txt
+# macOS / Linux — use system venv (NOT conda)
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements-dev.txt && pip install -e .
+
+# Windows
+python -m venv .venv && .venv\Scripts\Activate.ps1
+pip install -r requirements-dev.txt && pip install -e .
+
 pytest tests/                  # run all tests
 pytest --cov=mdtopdf tests/    # with coverage (target >= 70%)
 black mdtopdf/                 # format
