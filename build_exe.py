@@ -24,8 +24,8 @@ build_exe.py — 将 mdtopdf GUI 打包为 Windows 单文件 EXE
 from __future__ import annotations
 
 import argparse
+import importlib.util
 import os
-import shutil
 import subprocess
 import sys
 from pathlib import Path
@@ -98,6 +98,7 @@ HIDDEN_IMPORTS: list[str] = [
     "jinja2.ext",
     "yaml",
     "frontmatter",
+    "latex2mathml",
     # WeasyPrint C-level dependencies
     "cffi",
     "pydyf",
@@ -115,7 +116,23 @@ COLLECT_ALL: list[str] = [
     "weasyprint",
     "pygments",
     "fitz",
+    "frontmatter",
+    "latex2mathml",
 ]
+
+# Build-time required modules. Key is import name, value is pip package name.
+REQUIRED_BUILD_MODULES: dict[str, str] = {
+    "click": "click",
+    "markdown": "Markdown",
+    "frontmatter": "python-frontmatter",
+    "pygments": "Pygments",
+    "weasyprint": "WeasyPrint",
+    "yaml": "PyYAML",
+    "requests": "requests",
+    "PIL": "Pillow",
+    "jinja2": "Jinja2",
+    "latex2mathml": "latex2mathml",
+}
 
 
 # ── GTK3 检测 ─────────────────────────────────────────────────────────────────
@@ -255,6 +272,35 @@ def ensure_pyinstaller() -> None:
         )
 
 
+def ensure_build_dependencies() -> None:
+    """Ensure required runtime dependencies exist in the current build interpreter."""
+    missing_packages: list[str] = []
+    for module_name, package_name in REQUIRED_BUILD_MODULES.items():
+        if importlib.util.find_spec(module_name) is None:
+            missing_packages.append(package_name)
+
+    if not missing_packages:
+        return
+
+    missing_packages = sorted(set(missing_packages))
+    print("检测到当前环境缺少运行依赖，正在安装：")
+    print(f"  {', '.join(missing_packages)}")
+    subprocess.run(
+        [sys.executable, "-m", "pip", "install", *missing_packages],
+        check=True,
+    )
+
+    unresolved: list[str] = []
+    for module_name in REQUIRED_BUILD_MODULES:
+        if importlib.util.find_spec(module_name) is None:
+            unresolved.append(module_name)
+    if unresolved:
+        names = ", ".join(unresolved)
+        raise RuntimeError(
+            f"安装后仍缺少模块: {names}。请确认使用的是正确解释器: {sys.executable}"
+        )
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(
         description="将 mdtopdf GUI 打包为 Windows EXE",
@@ -287,12 +333,14 @@ def main() -> None:
     print("  mdtopdf EXE 打包工具")
     print("=" * 60)
     print(f"  模式   : {'单文件 (--onefile)' if onefile else '文件夹 (--onedir)'}")
+    print(f"  Python : {sys.executable}")
     print(f"  GTK3   : {gtk3_bin or '(依赖系统 PATH)'}")
     print(f"  输出   : {DIST_DIR}")
     print()
 
     # 1. 确保 PyInstaller 可用
     ensure_pyinstaller()
+    ensure_build_dependencies()
 
     # 2. 打包 GUI（无控制台窗口）
     print("▶ 打包 GUI（mdtopdf-gui.exe）…")
